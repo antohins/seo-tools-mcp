@@ -15,7 +15,7 @@ Five **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Go
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
-| `metrika` | `metrika_counters`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (auto-refresh) |
+| `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (auto-refresh) |
 
 > **Regional focus:** XMLStock covers both Google and Yandex SERP, while Wordstat, Webmaster and Metrica are Yandex services — this toolkit is most useful for SEO on the Russian/CIS market (though GSC and the Google side of XMLStock are global).
 

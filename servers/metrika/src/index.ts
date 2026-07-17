@@ -19,6 +19,7 @@ import {
 import { z } from 'zod';
 import { landingFilter } from './filters.js';
 import { collectAllPages, type StatResponse } from './paginate.js';
+import { mapReportRows, shortKey } from './report.js';
 
 loadSharedEnv();
 
@@ -54,6 +55,80 @@ async function statQuery(params: Record<string, string | number | undefined>, ac
 function statQueryAll(params: Record<string, string | number | undefined>, maxRows: number, account?: string): Promise<StatResponse> {
   return collectAllPages((offset, limit) => statQuery({ ...params, limit, offset }, account), maxRows);
 }
+
+/** GET Stat API /bytime (динамика метрик по времени). */
+async function statBytime(params: Record<string, string | number | undefined>, account?: string): Promise<BytimeResponse> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') qs.set(k, String(v));
+  }
+  return yandexFetchJson<BytimeResponse>(TOKEN_ENV, `${STAT_URL}/bytime?${qs}`, {}, account);
+}
+
+interface BytimeResponse {
+  data: Array<{ dimensions: Array<{ name: string }>; metrics: number[][] }>;
+  time_intervals?: string[][];
+  totals?: number[][];
+  sampled?: boolean;
+}
+
+// Базовые метрики визитов для курируемых отчётов
+const SESSION_METRICS = ['ym:s:visits', 'ym:s:users', 'ym:s:bounceRate', 'ym:s:pageDepth', 'ym:s:avgVisitDurationSeconds'];
+
+/** Диапазон дат YYYY-MM-DD: заданный или последние `days` дней. */
+function metrikaDates(date1: string | undefined, date2: string | undefined, days: number): { date1: string; date2: string } {
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { date1: date1 ?? iso(Date.now() - days * 864e5), date2: date2 ?? iso(Date.now()) };
+}
+
+/** Универсальный отчёт Stat API /data → строки + totals + флаг сэмплирования. */
+async function runReport(
+  o: {
+    id: string;
+    dimensions: string[];
+    metrics: string[];
+    date1: string;
+    date2: string;
+    filters?: string;
+    sort?: string;
+    limit: number;
+    accuracy: string;
+  },
+  account?: string,
+) {
+  const res = await statQueryAll(
+    {
+      ids: o.id,
+      dimensions: o.dimensions.join(',') || undefined,
+      metrics: o.metrics.join(','),
+      date1: o.date1,
+      date2: o.date2,
+      filters: o.filters,
+      sort: o.sort,
+      accuracy: o.accuracy,
+    },
+    o.limit,
+    account,
+  );
+  return {
+    rows: mapReportRows(res, o.dimensions, o.metrics),
+    totals: res.totals ?? null,
+    total_rows: res.total_rows ?? null,
+    sampled: res.sampled ?? false,
+  };
+}
+
+const counterIdParam = z.number().int().optional().describe('Номер счётчика (по умолчанию METRIKA_COUNTER_ID)');
+const date1Param = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional()
+  .describe('YYYY-MM-DD (по умолчанию 30 дней назад)');
+const date2Param = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional()
+  .describe('YYYY-MM-DD (по умолчанию сегодня)');
 
 const server = new McpServer({ name: 'metrika', version: '1.0.0' });
 
@@ -286,6 +361,207 @@ server.registerTool(
       avgVisitDurationSeconds: r.metrics[3] ?? 0,
     }));
     return jsonResult({ rowCount: rows.length, rows });
+  }),
+);
+
+server.registerTool(
+  'metrika_report',
+  {
+    description:
+      'Произвольный отчёт Stat API: любые измерения × метрики Метрики. Даёт полный доступ к отчётам. ' +
+      'dimensions/metrics — имена вида ym:s:<name> (визиты) или ym:pv:<name> (просмотры), напр. ' +
+      'ym:s:lastTrafficSource, ym:s:deviceCategory, ym:s:regionCity; метрики ym:s:visits, ym:s:users, ym:s:bounceRate. ' +
+      "filters — выражение Метрики (ym:s:lastTrafficSource=='organic'). Ключи в ответе — короткие (без ym:ns:).",
+    inputSchema: {
+      metrics: z.array(z.string()).min(1).describe('Метрики, напр. ["ym:s:visits","ym:s:users","ym:s:bounceRate"]'),
+      dimensions: z.array(z.string()).default([]).describe('Измерения (можно пусто — тогда только totals)'),
+      date1: date1Param,
+      date2: date2Param,
+      filters: z.string().optional().describe("Выражение фильтра Метрики, напр. ym:s:lastTrafficSource=='organic'"),
+      sort: z.string().optional().describe('Сортировка, напр. -ym:s:visits'),
+      limit: z.number().int().min(1).max(50_000).default(1000),
+      accuracy: z.string().default('full').describe("full | 'auto' | доля выборки 0..1 (напр. 0.1)"),
+      counterId: counterIdParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const id = counterId(args.counterId, args.account);
+    const { date1, date2 } = metrikaDates(args.date1, args.date2, 30);
+    const rep = await runReport(
+      {
+        id,
+        dimensions: args.dimensions,
+        metrics: args.metrics,
+        date1,
+        date2,
+        filters: args.filters,
+        sort: args.sort,
+        limit: args.limit,
+        accuracy: args.accuracy,
+      },
+      args.account,
+    );
+    return jsonResult({ counter: id, date1, date2, dimensions: args.dimensions, metrics: args.metrics, rowCount: rep.rows.length, ...rep });
+  }),
+);
+
+server.registerTool(
+  'metrika_bytime',
+  {
+    description:
+      'Динамика метрик по времени (Stat API /bytime): каждая метрика — временной ряд. ' +
+      'group: day | week | month | hour. Возвращает { time_intervals, series: [{ …измерения, metrics }] }.',
+    inputSchema: {
+      metrics: z.array(z.string()).min(1).describe('Метрики, напр. ["ym:s:visits","ym:s:users"]'),
+      dimensions: z.array(z.string()).default([]).describe('Измерения (напр. ["ym:s:lastTrafficSource"]) — отдельный ряд на значение'),
+      group: z.enum(['day', 'week', 'month', 'hour']).default('day'),
+      date1: date1Param,
+      date2: date2Param,
+      filters: z.string().optional(),
+      limit: z.number().int().min(1).max(1000).default(100),
+      counterId: counterIdParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const id = counterId(args.counterId, args.account);
+    const { date1, date2 } = metrikaDates(args.date1, args.date2, 30);
+    const res = await statBytime(
+      {
+        ids: id,
+        metrics: args.metrics.join(','),
+        dimensions: args.dimensions.join(',') || undefined,
+        group: args.group,
+        date1,
+        date2,
+        filters: args.filters,
+        limit: args.limit,
+        accuracy: 'full',
+      },
+      args.account,
+    );
+    const series = (res.data ?? []).map((r) => {
+      const dims: Record<string, unknown> = {};
+      args.dimensions.forEach((d, i) => {
+        dims[shortKey(d)] = r.dimensions[i]?.name ?? null;
+      });
+      const metrics: Record<string, number[]> = {};
+      args.metrics.forEach((m, i) => {
+        metrics[shortKey(m)] = r.metrics[i] ?? [];
+      });
+      return { ...dims, metrics };
+    });
+    return jsonResult({
+      counter: id,
+      group: args.group,
+      date1,
+      date2,
+      time_intervals: res.time_intervals ?? [],
+      sampled: res.sampled ?? false,
+      series,
+    });
+  }),
+);
+
+server.registerTool(
+  'metrika_traffic_sources',
+  {
+    description:
+      'Источники трафика: визиты/пользователи/отказы/глубина/длительность по ym:s:lastTrafficSource (organic/direct/ad/referral/social/…).',
+    inputSchema: {
+      date1: date1Param,
+      date2: date2Param,
+      limit: z.number().int().min(1).max(1000).default(20),
+      counterId: counterIdParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const id = counterId(args.counterId, args.account);
+    const { date1, date2 } = metrikaDates(args.date1, args.date2, 30);
+    const rep = await runReport(
+      {
+        id,
+        dimensions: ['ym:s:lastTrafficSource'],
+        metrics: SESSION_METRICS,
+        date1,
+        date2,
+        sort: '-ym:s:visits',
+        limit: args.limit,
+        accuracy: 'full',
+      },
+      args.account,
+    );
+    return jsonResult({ counter: id, date1, date2, ...rep });
+  }),
+);
+
+server.registerTool(
+  'metrika_geo',
+  {
+    description: 'География визитов: распределение по странам/регионам/городам. level: country | region | city.',
+    inputSchema: {
+      level: z.enum(['country', 'region', 'city']).default('city'),
+      date1: date1Param,
+      date2: date2Param,
+      limit: z.number().int().min(1).max(1000).default(50),
+      counterId: counterIdParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const id = counterId(args.counterId, args.account);
+    const { date1, date2 } = metrikaDates(args.date1, args.date2, 30);
+    const dim = { country: 'ym:s:regionCountry', region: 'ym:s:regionArea', city: 'ym:s:regionCity' }[args.level];
+    const rep = await runReport(
+      { id, dimensions: [dim], metrics: SESSION_METRICS, date1, date2, sort: '-ym:s:visits', limit: args.limit, accuracy: 'full' },
+      args.account,
+    );
+    return jsonResult({ counter: id, level: args.level, date1, date2, ...rep });
+  }),
+);
+
+server.registerTool(
+  'metrika_devices',
+  {
+    description: 'Технологии визитов: распределение по устройствам/ОС/браузерам. by: device | os | browser.',
+    inputSchema: {
+      by: z.enum(['device', 'os', 'browser']).default('device'),
+      date1: date1Param,
+      date2: date2Param,
+      limit: z.number().int().min(1).max(1000).default(50),
+      counterId: counterIdParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const id = counterId(args.counterId, args.account);
+    const { date1, date2 } = metrikaDates(args.date1, args.date2, 30);
+    const dim = { device: 'ym:s:deviceCategory', os: 'ym:s:operatingSystem', browser: 'ym:s:browser' }[args.by];
+    const rep = await runReport(
+      { id, dimensions: [dim], metrics: SESSION_METRICS, date1, date2, sort: '-ym:s:visits', limit: args.limit, accuracy: 'full' },
+      args.account,
+    );
+    return jsonResult({ counter: id, by: args.by, date1, date2, ...rep });
+  }),
+);
+
+server.registerTool(
+  'metrika_goals',
+  {
+    description: 'Список целей счётчика (id, name, type) — для отчётов по конверсиям (метрика ym:s:goal<ID>reaches).',
+    inputSchema: { counterId: counterIdParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const id = counterId(args.counterId, args.account);
+    const data = await yandexFetchJson<{ goals?: Array<{ id: number; name: string; type: string }> }>(
+      TOKEN_ENV,
+      `${MGMT_URL}/counter/${id}/goals`,
+      {},
+      args.account,
+    );
+    return jsonResult({ counter: id, goals: (data.goals ?? []).map((g) => ({ id: g.id, name: g.name, type: g.type })) });
   }),
 );
 

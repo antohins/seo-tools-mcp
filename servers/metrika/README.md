@@ -13,10 +13,16 @@ Then set credentials right in the chat: `metrika_auth_status` → `metrika_set_c
 
 ## Tools
 
-- `metrika_counters`
-- `metrika_landing_behavior`
-- `metrika_search_phrases`
-- `metrika_top_landings`
+- `metrika_report` — arbitrary report: any dimensions × metrics, filters, sort (full Stat API)
+- `metrika_bytime` — metrics over time (day/week/month/hour)
+- `metrika_traffic_sources` — visits/users/bounce by traffic source
+- `metrika_geo` — visits by country/region/city
+- `metrika_devices` — visits by device/OS/browser
+- `metrika_goals` — list of conversion goals
+- `metrika_counters` — accessible counters
+- `metrika_landing_behavior` — landing-page behavior + goal reaches
+- `metrika_search_phrases` — organic search phrases
+- `metrika_top_landings` — top organic landing pages
 
 ---
 
