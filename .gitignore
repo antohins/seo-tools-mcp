@@ -8,3 +8,7 @@ dist/
 # ключи сервис-аккаунтов и токены — никогда в git
 *.sa.json
 secrets/
+# внутренний рабочий документ — не публикуем
+BACKPORT-FROM-PANEL.md
+# npm-тарболы от pnpm pack
+*.tgz
