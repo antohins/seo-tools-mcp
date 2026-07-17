@@ -13,10 +13,19 @@ Then set credentials right in the chat: `ywm_auth_status` → `ywm_set_credentia
 
 ## Tools
 
-- `ywm_hosts`
-- `ywm_search_queries`
-- `ywm_recommended_queries`
-- `ywm_popular`
+- `ywm_hosts` — user id + verified sites
+- `ywm_summary` — SQI, pages in search, excluded, site problems by severity
+- `ywm_search_queries` — query analytics for a URL (~2 weeks)
+- `ywm_queries_history` — total shows/clicks/positions over time
+- `ywm_recommended_queries` — approximated recommended queries (demand + click shortfall)
+- `ywm_popular` — popular queries of the host
+- `ywm_indexing_history` — pages in search over time
+- `ywm_sqi_history` — SQI over time
+- `ywm_external_links` — external backlinks sample + total count
+- `ywm_broken_links` — broken internal/external links
+- `ywm_diagnostics` — site problems
+- `ywm_important_urls` — monitored URLs with indexing/search status
+- `ywm_sitemaps` — sitemaps with status
 
 ---
 

@@ -177,6 +177,32 @@ registerYandexOauthTools(server, 'ywm', 'Яндекс.Вебмастер (hostin
 
 const deviceParam = z.enum(['ALL', 'DESKTOP', 'MOBILE_AND_TABLET', 'MOBILE', 'TABLET']).default('ALL');
 
+const hostIdParam = z.string().optional().describe('Хост Вебмастера (формат https:example.com:443); по умолчанию YWM_HOST_ID');
+
+/** Резолвит host + user_id и собирает префикс пути /user/{id}/hosts/{host}. */
+async function hostCtx(hostId: string | undefined, account?: string): Promise<{ hostId: string; base: string }> {
+  const h = resolveHost(hostId, account);
+  const userId = await getUserId(account);
+  return { hostId: h, base: `/user/${userId}/hosts/${encodeURIComponent(h)}` };
+}
+
+/** Диапазон дат YYYY-MM-DD: заданный или последние `days` дней. */
+function dateRange(from: string | undefined, to: string | undefined, days: number): { date_from: string; date_to: string } {
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { date_from: from ?? iso(Date.now() - days * 864e5), date_to: to ?? iso(Date.now()) };
+}
+
+const dateFromParam = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional()
+  .describe('YYYY-MM-DD (по умолчанию — от дефолтного окна)');
+const dateToParam = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional()
+  .describe('YYYY-MM-DD (по умолчанию сегодня)');
+
 server.registerTool(
   'ywm_hosts',
   {
@@ -373,6 +399,167 @@ server.registerTool(
       offset += batch.length;
     }
     return jsonResult({ hostId, rowCount: rows.length, rows });
+  }),
+);
+
+server.registerTool(
+  'ywm_summary',
+  {
+    description: 'Сводка по хосту: ИКС (sqi), страниц в поиске (searchable_pages_count), исключено, число проблем сайта по важности.',
+    inputSchema: { hostId: hostIdParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const d = await ywmGet<Record<string, unknown>>(`${base}/summary`, args.account);
+    return jsonResult({
+      hostId,
+      sqi: d.sqi ?? null,
+      searchable_pages_count: d.searchable_pages_count ?? null,
+      excluded_pages_count: d.excluded_pages_count ?? null,
+      site_problems: d.site_problems ?? {},
+    });
+  }),
+);
+
+server.registerTool(
+  'ywm_sqi_history',
+  {
+    description: 'История ИКС (индекс качества сайта) по датам: { points: [{ date, value }] }.',
+    inputSchema: { hostId: hostIdParam, dateFrom: dateFromParam, dateTo: dateToParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const { date_from, date_to } = dateRange(args.dateFrom, args.dateTo, 180);
+    const d = await ywmGet<{ points?: unknown[] }>(`${base}/sqi-history?date_from=${date_from}&date_to=${date_to}`, args.account);
+    return jsonResult({ hostId, date_from, date_to, points: d.points ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_indexing_history',
+  {
+    description: 'Динамика числа страниц В ПОИСКЕ по датам (search-urls/in-search): { history: [{ date, value }] }.',
+    inputSchema: { hostId: hostIdParam, dateFrom: dateFromParam, dateTo: dateToParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const { date_from, date_to } = dateRange(args.dateFrom, args.dateTo, 30);
+    const d = await ywmGet<{ history?: unknown[] }>(
+      `${base}/search-urls/in-search/history?date_from=${date_from}&date_to=${date_to}`,
+      args.account,
+    );
+    return jsonResult({ hostId, date_from, date_to, history: d.history ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_external_links',
+  {
+    description:
+      'Внешние ссылки на сайт (беклинки), выборка: { count (всего), links: [{ source_url, destination_url, discovery_date, source_last_access_date }] }.',
+    inputSchema: {
+      hostId: hostIdParam,
+      offset: z.number().int().min(0).default(0),
+      limit: z.number().int().min(1).max(100).default(50),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const d = await ywmGet<{ count?: number; links?: unknown[] }>(
+      `${base}/links/external/samples?offset=${args.offset}&limit=${args.limit}`,
+      args.account,
+    );
+    return jsonResult({ hostId, count: d.count ?? null, offset: args.offset, links: d.links ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_broken_links',
+  {
+    description:
+      'Битые ссылки, выборка: внутренние (scope=internal) или внешние (external). { count, links: [{ source_url, destination_url, ... }] }.',
+    inputSchema: {
+      hostId: hostIdParam,
+      scope: z.enum(['internal', 'external']).default('internal'),
+      offset: z.number().int().min(0).default(0),
+      limit: z.number().int().min(1).max(100).default(50),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const d = await ywmGet<{ count?: number; links?: unknown[] }>(
+      `${base}/links/${args.scope}/broken/samples?offset=${args.offset}&limit=${args.limit}`,
+      args.account,
+    );
+    return jsonResult({ hostId, scope: args.scope, count: d.count ?? null, offset: args.offset, links: d.links ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_diagnostics',
+  {
+    description: 'Диагностика сайта Вебмастером — список проблем: { problems: [{ ... severity, state, ... }] }.',
+    inputSchema: { hostId: hostIdParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const d = await ywmGet<{ problems?: unknown }>(`${base}/diagnostics/`, args.account);
+    return jsonResult({ hostId, problems: d.problems ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_important_urls',
+  {
+    description:
+      'Мониторинг важных URL: { urls: [{ url, update_date, change_indicators, indexing_status, search_status }] } — статус индексации и изменения важных страниц.',
+    inputSchema: { hostId: hostIdParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const d = await ywmGet<{ urls?: unknown[] }>(`${base}/important-urls/`, args.account);
+    return jsonResult({ hostId, count: (d.urls ?? []).length, urls: d.urls ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_sitemaps',
+  {
+    description:
+      'Файлы Sitemap хоста со статусом: { sitemaps: [{ sitemap_id, sitemap_url, last_access_date, errors_count, urls_count, children_count, sources, sitemap_type }] }.',
+    inputSchema: { hostId: hostIdParam, account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const d = await ywmGet<{ sitemaps?: unknown[] }>(`${base}/sitemaps`, args.account);
+    return jsonResult({ hostId, count: (d.sitemaps ?? []).length, sitemaps: d.sitemaps ?? [] });
+  }),
+);
+
+server.registerTool(
+  'ywm_queries_history',
+  {
+    description:
+      'История суммарной статистики запросов по хосту по датам (показы/клики/позиции): { indicators: {...} }. ' +
+      'indicator: TOTAL_SHOWS | TOTAL_CLICKS | AVG_SHOW_POSITION | AVG_CLICK_POSITION.',
+    inputSchema: {
+      hostId: hostIdParam,
+      indicator: z.enum(['TOTAL_SHOWS', 'TOTAL_CLICKS', 'AVG_SHOW_POSITION', 'AVG_CLICK_POSITION']).default('TOTAL_SHOWS'),
+      dateFrom: dateFromParam,
+      dateTo: dateToParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const { hostId, base } = await hostCtx(args.hostId, args.account);
+    const { date_from, date_to } = dateRange(args.dateFrom, args.dateTo, 30);
+    const d = await ywmGet<{ indicators?: unknown }>(
+      `${base}/search-queries/all/history?date_from=${date_from}&date_to=${date_to}&query_indicator=${args.indicator}`,
+      args.account,
+    );
+    return jsonResult({ hostId, indicator: args.indicator, date_from, date_to, indicators: d.indicators ?? {} });
   }),
 );
 
