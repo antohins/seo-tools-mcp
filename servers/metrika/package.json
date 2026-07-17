@@ -1,7 +1,7 @@
 {
   "name": "seo-tools-mcp-metrika",
   "mcpName": "io.github.antohins/seo-tools-mcp-metrika",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for Yandex.Metrica Stat API (read-only)",
   "license": "MIT",
   "author": "antohins",

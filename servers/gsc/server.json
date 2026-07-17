@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/antohins/seo-tools-mcp#readme",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "seo-tools-mcp-gsc",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "transport": {
         "type": "stdio"
       },

@@ -1,10 +1,17 @@
 {
   "name": "seo-tools-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Five read-only MCP servers for SEO on the Google/Yandex (RU/CIS) market: SERP (XMLStock), Yandex Wordstat, Google Search Console, Yandex.Webmaster and Yandex.Metrica.",
   "author": "antohins",
   "homepage": "https://github.com/antohins/seo-tools-mcp",
   "repository": "https://github.com/antohins/seo-tools-mcp",
   "license": "MIT",
-  "keywords": ["mcp", "seo", "yandex", "google-search-console", "wordstat", "serp"]
+  "keywords": [
+    "mcp",
+    "seo",
+    "yandex",
+    "google-search-console",
+    "wordstat",
+    "serp"
+  ]
 }

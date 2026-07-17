@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-07-17
+
+### Added
+- Richer MCP Registry metadata in each `server.json`: `title`, `websiteUrl` and
+  `environmentVariables` (documents the credentials/defaults each server accepts,
+  with `isSecret`/`isRequired`). No functional changes to the servers.
+- `repository` field in the Open Plugins manifest (`.plugin/plugin.json`).
+
 ## [1.0.1] — 2026-07-17
 
 ### Added
@@ -43,6 +51,7 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/antohins/seo-tools-mcp/releases/tag/v1.0.0
