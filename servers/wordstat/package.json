@@ -1,7 +1,7 @@
 {
   "name": "seo-tools-mcp-wordstat",
   "mcpName": "io.github.antohins/seo-tools-mcp-wordstat",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "MCP server for Yandex Wordstat keyword frequencies (official API v2)",
   "license": "MIT",
   "author": "antohins",

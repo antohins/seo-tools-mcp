@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-17
+
+Major read-only tool expansion across all servers (~14 → ~38 tools), verified against live APIs.
+
+### Added
+- **GSC**: `gsc_inspect_url` (URL Inspection — index status, coverage, canonical, last crawl,
+  mobile usability, rich results), `gsc_list_sitemaps`, `gsc_get_sitemap`, `gsc_get_site`;
+  `dataState` (final/all) on `gsc_query`.
+- **XMLStock**: Google verticals `xmlstock_images`, `xmlstock_news`, `xmlstock_video`; plus
+  `safeSearch`, `includeSimilar` (Google) and `filter`, `sortby`, `maxpassages`, `l10n` (Yandex)
+  on `xmlstock_serp`.
+- **Wordstat**: `wordstat_regions` now resolves `region_id` → region name (cached).
+- **YWM**: `ywm_summary`, `ywm_sqi_history`, `ywm_indexing_history`, `ywm_external_links`
+  (backlinks), `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps`,
+  `ywm_queries_history`.
+- **Metrica**: `metrika_report` (arbitrary dimensions × metrics), `metrika_bytime` (time series),
+  `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_goals`.
+- Unit tests for the new pure logic (SERP-vertical parsers, region flattening, report mapping).
+
 ## [1.0.2] — 2026-07-17
 
 ### Added
