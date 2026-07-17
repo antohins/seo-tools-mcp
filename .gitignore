@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# ключи сервис-аккаунтов и токены — никогда в git
+*.sa.json
+secrets/
