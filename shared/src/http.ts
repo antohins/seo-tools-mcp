@@ -48,7 +48,11 @@ interface AttemptResult {
   retryAfterMs: number | null;
 }
 
-async function attemptOnce(url: string, init: Omit<FetchRetryOptions, 'timeoutMs' | 'attempts' | 'backoffMs'>, timeoutMs: number): Promise<AttemptResult> {
+async function attemptOnce(
+  url: string,
+  init: Omit<FetchRetryOptions, 'timeoutMs' | 'attempts' | 'backoffMs'>,
+  timeoutMs: number,
+): Promise<AttemptResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

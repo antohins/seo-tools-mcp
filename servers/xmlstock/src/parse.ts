@@ -1,5 +1,5 @@
 /** Разбор органической выдачи XMLStock — вынесено из index.ts для тестируемости. */
-import { asArray, extractBolds, stripTags, domainOf } from './xml.js';
+import { asArray, domainOf, extractBolds, stripTags } from './xml.js';
 
 export interface SerpDoc {
   position: number;
@@ -38,7 +38,9 @@ export function parseDocs(doc: any): { docs: SerpDoc[]; packs: string[]; sitelin
       const url = String(d?.url ?? '');
       if (!url.startsWith('http')) continue; // битый/пустой организм-doc — отбрасываем до domainOf
       const rawTitle = String(d?.title ?? '');
-      const rawPassages = asArray<any>(d?.passages?.passage).map((p) => String(p ?? '')).join(' … ');
+      const rawPassages = asArray<any>(d?.passages?.passage)
+        .map((p) => String(p ?? ''))
+        .join(' … ');
       position += 1;
       const item: SerpDoc = {
         position,

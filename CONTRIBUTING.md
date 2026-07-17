@@ -18,6 +18,8 @@ pnpm build        # shared (tsc) → servers (tsup bundle)
 ## Checks (run before opening a PR)
 
 ```bash
+pnpm lint         # Biome (lint + format check)
+pnpm format       # auto-fix lint/format issues
 pnpm typecheck    # types across all workspaces
 pnpm test         # unit tests (vitest, no network)
 ```

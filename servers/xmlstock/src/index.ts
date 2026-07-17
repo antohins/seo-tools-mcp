@@ -15,10 +15,24 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  accountParam,
+  CostLogger,
+  fetchJson,
+  fetchText,
+  getConfig,
+  HttpError,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  requireEnv,
+  resolveRegionId,
+  safeHandler,
+  sleep,
+} from '@seo-tools/shared';
 import { z } from 'zod';
-import { loadSharedEnv, requireEnv, getConfig, fetchText, fetchJson, HttpError, jsonResult, safeHandler, CostLogger, registerAuthTools, accountParam, resolveRegionId, sleep } from '@seo-tools/shared';
-import { parseXml, asArray, stripTags, domainOf } from './xml.js';
 import { parseDocs, type SerpDoc } from './parse.js';
+import { asArray, domainOf, parseXml, stripTags } from './xml.js';
 
 loadSharedEnv();
 
@@ -33,7 +47,10 @@ const cost = new CostLogger('xmlstock', () => Number(getConfig('XMLSTOCK_PRICE_P
 // читаются лениво — set_credentials применяется без перезапуска)
 const DEFAULT_AGGREGATORS = 'avito.ru,cian.ru,domclick.ru,yandex.ru,m2.ru,youla.ru';
 const aggregators = (): string[] =>
-  (getConfig('XMLSTOCK_EXCLUDE_DOMAINS') || DEFAULT_AGGREGATORS).split(',').map((s) => s.trim()).filter(Boolean);
+  (getConfig('XMLSTOCK_EXCLUDE_DOMAINS') || DEFAULT_AGGREGATORS)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 const RETRIABLE_CODES = new Set([20, 21, 22, 23, 24, 25, 101, 110, 111, 500]);
 const RATE_LIMIT_CODES = new Set([55]);
@@ -60,7 +77,7 @@ async function xmlstockGet(base: string, params: Record<string, string | number 
     }
 
     const code = Number(err['@_code'] ?? 0);
-    const message = stripTags(typeof err === 'string' ? err : err['#text'] ?? '');
+    const message = stripTags(typeof err === 'string' ? err : (err['#text'] ?? ''));
     if (code === 15) {
       cost.track(engineLabel);
       return doc; // «ничего не найдено» — нормальная пустая выдача, деньги списаны
@@ -74,7 +91,9 @@ async function xmlstockGet(base: string, params: Record<string, string | number 
     }
     // 31/42 — проблема авторизации: адресуем на ключи, а не сухой код
     if (code === 31 || code === 42) {
-      throw new Error(`XMLStock error ${code}: ${message}. Похоже на проблему авторизации — проверьте XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials / xmlstock_auth_status).`);
+      throw new Error(
+        `XMLStock error ${code}: ${message}. Похоже на проблему авторизации — проверьте XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials / xmlstock_auth_status).`,
+      );
     }
     throw new Error(`XMLStock error ${code}: ${message}`);
   }
@@ -96,11 +115,11 @@ function parseFeatures(doc: any) {
   }
 
   const paa = asArray<any>(add?.relatedQuestions?.item)
-    .map((q) => stripTags(String(typeof q === 'string' ? q : q?.question ?? q?.title ?? '')))
+    .map((q) => stripTags(String(typeof q === 'string' ? q : (q?.question ?? q?.title ?? ''))))
     .filter(Boolean);
 
   const related = asArray<any>(add?.relatedSearches?.query)
-    .map((q) => stripTags(String(typeof q === 'string' ? q : q?.title ?? '')))
+    .map((q) => stripTags(String(typeof q === 'string' ? q : (q?.title ?? ''))))
     .filter(Boolean);
 
   return {
@@ -112,16 +131,21 @@ function parseFeatures(doc: any) {
 
 const server = new McpServer({ name: 'xmlstock', version: '1.0.0' });
 
-registerAuthTools(server, 'xmlstock', [
-  { env: 'XMLSTOCK_USER', label: 'ID пользователя XMLStock (личный кабинет xmlstock.com)', secret: false },
-  { env: 'XMLSTOCK_KEY', label: 'API-ключ XMLStock (личный кабинет xmlstock.com)' },
-  { env: 'XMLSTOCK_EXCLUDE_DOMAINS', label: 'Домены-агрегаторы для excludeAggregators, через запятую', required: false, secret: false },
-], {
-  help:
-    '1) Регистрация на https://xmlstock.com → личный кабинет. 2) Пополнить баланс (Google XML от 12 ₽/1000, Яндекс Live от 12 ₽/1000). ' +
-    '3) Взять ID пользователя и API-ключ из кабинета. 4) В настройках кабинета можно задать регион по умолчанию. ' +
-    'Проверка после сохранения — xmlstock_balance.',
-});
+registerAuthTools(
+  server,
+  'xmlstock',
+  [
+    { env: 'XMLSTOCK_USER', label: 'ID пользователя XMLStock (личный кабинет xmlstock.com)', secret: false },
+    { env: 'XMLSTOCK_KEY', label: 'API-ключ XMLStock (личный кабинет xmlstock.com)' },
+    { env: 'XMLSTOCK_EXCLUDE_DOMAINS', label: 'Домены-агрегаторы для excludeAggregators, через запятую', required: false, secret: false },
+  ],
+  {
+    help:
+      '1) Регистрация на https://xmlstock.com → личный кабинет. 2) Пополнить баланс (Google XML от 12 ₽/1000, Яндекс Live от 12 ₽/1000). ' +
+      '3) Взять ID пользователя и API-ключ из кабинета. 4) В настройках кабинета можно задать регион по умолчанию. ' +
+      'Проверка после сохранения — xmlstock_balance.',
+  },
+);
 
 server.registerTool(
   'xmlstock_serp',
@@ -139,8 +163,12 @@ server.registerTool(
       device: z.enum(['desktop', 'mobile']).default('desktop'),
       region: z.string().default('Москва').describe('«Москва»/«Россия»/213/225 — id Яндекса, XMLStock маппит и на Google'),
       depth: z.number().int().min(1).max(30).default(10).describe('Сколько органических позиций собрать'),
-      excludeAggregators: z.boolean().default(false)
-        .describe('Исключить домены-агрегаторы из органики (список — XMLSTOCK_EXCLUDE_DOMAINS, дефолт: avito/cian/domclick/yandex/m2/youla)'),
+      excludeAggregators: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Исключить домены-агрегаторы из органики (список — XMLSTOCK_EXCLUDE_DOMAINS, дефолт: avito/cian/domclick/yandex/m2/youla)',
+        ),
       includeAds: z.boolean().default(false).describe('Добавить рекламные блоки (ads=1)'),
       searchDomain: z.string().optional().describe('Доменная зона: google — ru/com/de..., yandex — ru/by/kz/com.tr (по умолчанию ru)'),
       lang: z.string().optional().describe('Google hl (язык интерфейса), Yandex lang'),
@@ -204,7 +232,9 @@ server.registerTool(
     if (args.excludeAggregators) {
       const aggs = aggregators();
       results = results.filter((r) => !aggs.some((a) => r.domain === a || r.domain.endsWith(`.${a}`)));
-      results.forEach((r, i) => (r.position = i + 1));
+      results.forEach((r, i) => {
+        r.position = i + 1;
+      });
     }
     results = results.slice(0, args.depth);
 
@@ -242,7 +272,9 @@ server.registerTool(
     } catch (err) {
       if (err instanceof HttpError) throw err; // 5xx/сеть — транзиент с понятным HTTP-статусом
       // не-JSON ответ (обычно HTML при неверных кредах) — адресуем на ключи
-      throw new Error('XMLStock не вернул JSON с балансом — вероятно неверные XMLSTOCK_USER/XMLSTOCK_KEY. Проверьте ключи (xmlstock_set_credentials).');
+      throw new Error(
+        'XMLStock не вернул JSON с балансом — вероятно неверные XMLSTOCK_USER/XMLSTOCK_KEY. Проверьте ключи (xmlstock_set_credentials).',
+      );
     }
     // Ругаемся только на явную ошибку в теле или пустой объект; ответ иной валидной формы отдаём как есть.
     const isObj = data !== null && typeof data === 'object' && !Array.isArray(data);

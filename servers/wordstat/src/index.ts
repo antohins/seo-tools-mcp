@@ -12,8 +12,17 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  accountParam,
+  fetchJson,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  requireEnv,
+  resolveRegionIds,
+  safeHandler,
+} from '@seo-tools/shared';
 import { z } from 'zod';
-import { loadSharedEnv, requireEnv, fetchJson, jsonResult, safeHandler, registerAuthTools, accountParam, resolveRegionIds } from '@seo-tools/shared';
 
 loadSharedEnv();
 
@@ -61,11 +70,15 @@ const toNum = (v: unknown): number => {
  * ВАЖНО: дефис/минус и «+» — операторы только В НАЧАЛЕ слова (« -слово», «+на»);
  * дефис внутри слова («санкт-петербург») оператором НЕ является.
  */
-const hasOperators = (q: string): boolean => /["\[\]()|]/.test(q) || /(^|\s)[!+-]\S/.test(q);
+const hasOperators = (q: string): boolean => /["[\]()|]/.test(q) || /(^|\s)[!+-]\S/.test(q);
 
 /** «купить квартиру» → «"!купить !квартиру"» (точная частотность как в веб-Вордстате). */
 function exactForm(query: string): string {
-  return `"${query.trim().split(/\s+/).map((w) => `!${w}`).join(' ')}"`;
+  return `"${query
+    .trim()
+    .split(/\s+/)
+    .map((w) => `!${w}`)
+    .join(' ')}"`;
 }
 
 interface TopResponse {
@@ -76,17 +89,22 @@ interface TopResponse {
 
 const server = new McpServer({ name: 'wordstat', version: '1.0.0' });
 
-registerAuthTools(server, 'wordstat', [
-  { env: 'WORDSTAT_API_KEY', label: 'Api-Key сервисного аккаунта Yandex Cloud (scope yc.search-api.execute)' },
-  { env: 'WORDSTAT_FOLDER_ID', label: 'ID каталога (folder) Yandex Cloud, где живёт сервисный аккаунт', secret: false },
-], {
-  help:
-    'Wordstat API v2 бесплатен, заявок не требует. Один раз в Yandex Cloud (console.yandex.cloud): ' +
-    '1) создать каталог (folder) или взять существующий — его ID → WORDSTAT_FOLDER_ID; ' +
-    '2) создать сервисный аккаунт с ролью search-api.webSearch.user; ' +
-    '3) для него выпустить API-ключ с областью действия yc.search-api.execute → WORDSTAT_API_KEY. ' +
-    'Квоты: 10 запросов/сек, 100/час. Проверка — wordstat_frequency по любой фразе.',
-});
+registerAuthTools(
+  server,
+  'wordstat',
+  [
+    { env: 'WORDSTAT_API_KEY', label: 'Api-Key сервисного аккаунта Yandex Cloud (scope yc.search-api.execute)' },
+    { env: 'WORDSTAT_FOLDER_ID', label: 'ID каталога (folder) Yandex Cloud, где живёт сервисный аккаунт', secret: false },
+  ],
+  {
+    help:
+      'Wordstat API v2 бесплатен, заявок не требует. Один раз в Yandex Cloud (console.yandex.cloud): ' +
+      '1) создать каталог (folder) или взять существующий — его ID → WORDSTAT_FOLDER_ID; ' +
+      '2) создать сервисный аккаунт с ролью search-api.webSearch.user; ' +
+      '3) для него выпустить API-ключ с областью действия yc.search-api.execute → WORDSTAT_API_KEY. ' +
+      'Квоты: 10 запросов/сек, 100/час. Проверка — wordstat_frequency по любой фразе.',
+  },
+);
 
 server.registerTool(
   'wordstat_frequency',
@@ -144,8 +162,14 @@ server.registerTool(
     inputSchema: {
       query: z.string().min(1).max(400),
       period: z.enum(['daily', 'weekly', 'monthly']).default('monthly'),
-      fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD'),
-      toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD'),
+      fromDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .describe('YYYY-MM-DD'),
+      toDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .describe('YYYY-MM-DD'),
       region: z.string().optional(),
       device: z.string().optional(),
       account: accountParam,
@@ -195,7 +219,11 @@ server.registerTool(
     };
     if (devices) body.devices = devices;
 
-    const data = await wordstatPost<{ results?: Array<{ region: string; count: string; share: number; affinityIndex: number }> }>('regions', body, args.account);
+    const data = await wordstatPost<{ results?: Array<{ region: string; count: string; share: number; affinityIndex: number }> }>(
+      'regions',
+      body,
+      args.account,
+    );
     const results = (data.results ?? [])
       .map((r) => ({ region_id: r.region, count: toNum(r.count), share: r.share ?? null, affinityIndex: r.affinityIndex ?? null }))
       .sort((a, b) => b.count - a.count)

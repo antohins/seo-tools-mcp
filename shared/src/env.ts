@@ -1,4 +1,4 @@
-import { getConfig, readConfigFile, envKey, accountsFor } from './config.js';
+import { accountsFor, envKey, getConfig, readConfigFile } from './config.js';
 
 /**
  * Прогрев кеша конфига. Исторически мержила файл в process.env — больше НЕ мержит:
@@ -25,8 +25,8 @@ export function requireEnv(name: string, account?: string): string {
     const known = accountsFor(name);
     throw new Error(
       `Не задана переменная окружения ${envKey(name, account)}.` +
-      (account ? ` Настроенные аккаунты для ${name}: ${known.length ? known.join(', ') : 'ни одного'}.` : '') +
-      ` Сохрани через <server>_set_credentials${account ? ` с account="${account}"` : ''} или в env-файл конфига.`,
+        (account ? ` Настроенные аккаунты для ${name}: ${known.length ? known.join(', ') : 'ни одного'}.` : '') +
+        ` Сохрани через <server>_set_credentials${account ? ` с account="${account}"` : ''} или в env-файл конфига.`,
     );
   }
   return value;

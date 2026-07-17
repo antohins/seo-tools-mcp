@@ -4,12 +4,13 @@
  * Opt-in: запускать `pnpm test:live` (иначе набор пропускается). В CI не гоняется.
  * xmlstock_serp намеренно НЕ дёргаем — он платный; проверяем free-эндпоинт balance.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { existsSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const LIVE = process.env.LIVE === '1';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

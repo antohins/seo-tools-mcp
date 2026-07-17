@@ -10,9 +10,9 @@
  * Запись (saveEnvValues) — атомарная: lock-каталог (best effort) → свежее чтение файла →
  * upsert → tmp-файл → rename. Конкурентные записи из разных серверных процессов не теряются.
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync, statSync, renameSync, rmdirSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export const ENV_FILE = process.env.SEO_TOOLS_MCP_ENV || join(homedir(), '.config', 'seo-tools-mcp', '.env');
 export const CONFIG_DIR = dirname(ENV_FILE);
@@ -71,7 +71,9 @@ export function hasRealEnvOverride(name: string, account?: string): boolean {
 const sleepSync = (ms: number) => {
   try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-  } catch { /* среда без SharedArrayBuffer — пропускаем паузу */ }
+  } catch {
+    /* среда без SharedArrayBuffer — пропускаем паузу */
+  }
 };
 
 /** Апсертит значения в env-файл атомарно (lock → fresh read → tmp → rename). */
@@ -113,7 +115,11 @@ export function saveEnvValues(values: Record<string, string>): string {
     return ENV_FILE;
   } finally {
     if (locked) {
-      try { rmdirSync(lockDir); } catch { /* уже снят */ }
+      try {
+        rmdirSync(lockDir);
+      } catch {
+        /* уже снят */
+      }
     }
   }
 }
@@ -126,7 +132,8 @@ export function maskSecret(v: string | undefined): string | null {
 }
 
 /** Имена query-параметров, значения которых нельзя писать в логи. */
-const SECRET_PARAM_RE = /^(key|apikey|api_key|token|access_token|refresh_token|password|passwd|pass|pwd|secret|client_secret|user|auth|sign)$/i;
+const SECRET_PARAM_RE =
+  /^(key|apikey|api_key|token|access_token|refresh_token|password|passwd|pass|pwd|secret|client_secret|user|auth|sign)$/i;
 
 /**
  * Маскирует секреты в URL перед логированием: значения секретных query-параметров
@@ -138,8 +145,14 @@ export function maskUrl(raw: string): string {
   try {
     const u = new URL(raw);
     let changed = false;
-    if (u.username) { u.username = 'REDACTED'; changed = true; }
-    if (u.password) { u.password = 'REDACTED'; changed = true; }
+    if (u.username) {
+      u.username = 'REDACTED';
+      changed = true;
+    }
+    if (u.password) {
+      u.password = 'REDACTED';
+      changed = true;
+    }
     for (const k of [...u.searchParams.keys()]) {
       if (SECRET_PARAM_RE.test(k)) {
         u.searchParams.set(k, 'REDACTED');

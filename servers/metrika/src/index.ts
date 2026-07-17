@@ -6,13 +6,19 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
 import {
-  loadSharedEnv, jsonResult, safeHandler, envKey, getConfig,
-  registerAuthTools, registerYandexOauthTools, yandexFetchJson, accountParam,
+  accountParam,
+  getConfig,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  registerYandexOauthTools,
+  safeHandler,
+  yandexFetchJson,
 } from '@seo-tools/shared';
+import { z } from 'zod';
+import { landingFilter } from './filters.js';
 import { collectAllPages, type StatResponse } from './paginate.js';
-import { escFilter, landingFilter } from './filters.js';
 
 loadSharedEnv();
 
@@ -26,7 +32,7 @@ function counterId(override?: number, account?: string): string {
   if (!id) {
     throw new Error(
       `Не указан счётчик Метрики${account ? ` для аккаунта «${account}»` : ''}: передай counterId или сохрани дефолт ` +
-      `через metrika_set_credentials${account ? ` (account="${account}")` : ''}. Список счётчиков — metrika_counters.`,
+        `через metrika_set_credentials${account ? ` (account="${account}")` : ''}. Список счётчиков — metrika_counters.`,
     );
   }
   return id;
@@ -51,20 +57,25 @@ function statQueryAll(params: Record<string, string | number | undefined>, maxRo
 
 const server = new McpServer({ name: 'metrika', version: '1.0.0' });
 
-registerAuthTools(server, 'metrika', [
-  { env: 'YANDEX_OAUTH_TOKEN', label: 'Общий OAuth-токен Яндекса (Вебмастер+Метрика)', required: false },
-  { env: 'METRIKA_OAUTH_TOKEN', label: 'Отдельный токен Метрики (перекрывает общий; обычно не нужен)', required: false },
-  { env: 'YANDEX_CLIENT_ID', label: 'ClientID OAuth-приложения Яндекса (для авторизации/refresh)', secret: false, required: false },
-  { env: 'YANDEX_CLIENT_SECRET', label: 'Client secret OAuth-приложения Яндекса', required: false },
-  { env: 'METRIKA_COUNTER_ID', label: 'Номер счётчика по умолчанию', secret: false, required: false },
-], {
-  help:
-    'Нужен OAuth-токен со scope «Яндекс.Метрика: получение статистики» (metrika:read). Быстрый путь: ' +
-    'metrika_oauth_start (одно приложение с правами Метрики И Вебмастера даёт общий токен для обоих серверов) → ' +
-    'пользователь открывает ссылку → код → metrika_oauth_finish. Затем задать METRIKA_COUNTER_ID ' +
-    '(список — metrika_counters).',
-  requireAnyOf: [['YANDEX_OAUTH_TOKEN', 'METRIKA_OAUTH_TOKEN']],
-});
+registerAuthTools(
+  server,
+  'metrika',
+  [
+    { env: 'YANDEX_OAUTH_TOKEN', label: 'Общий OAuth-токен Яндекса (Вебмастер+Метрика)', required: false },
+    { env: 'METRIKA_OAUTH_TOKEN', label: 'Отдельный токен Метрики (перекрывает общий; обычно не нужен)', required: false },
+    { env: 'YANDEX_CLIENT_ID', label: 'ClientID OAuth-приложения Яндекса (для авторизации/refresh)', secret: false, required: false },
+    { env: 'YANDEX_CLIENT_SECRET', label: 'Client secret OAuth-приложения Яндекса', required: false },
+    { env: 'METRIKA_COUNTER_ID', label: 'Номер счётчика по умолчанию', secret: false, required: false },
+  ],
+  {
+    help:
+      'Нужен OAuth-токен со scope «Яндекс.Метрика: получение статистики» (metrika:read). Быстрый путь: ' +
+      'metrika_oauth_start (одно приложение с правами Метрики И Вебмастера даёт общий токен для обоих серверов) → ' +
+      'пользователь открывает ссылку → код → metrika_oauth_finish. Затем задать METRIKA_COUNTER_ID ' +
+      '(список — metrika_counters).',
+    requireAnyOf: [['YANDEX_OAUTH_TOKEN', 'METRIKA_OAUTH_TOKEN']],
+  },
+);
 
 registerYandexOauthTools(server, 'metrika', 'Яндекс.Метрика (получение статистики), опционально + Вебмастер (hostinfo + verify)');
 
@@ -92,8 +103,14 @@ server.registerTool(
 
 const commonInput = {
   landingPage: z.string().describe('Страница входа: путь (/oae/dubai/) или полный URL'),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD'),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD'),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .describe('YYYY-MM-DD'),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .describe('YYYY-MM-DD'),
   counterId: z.number().int().optional().describe('Номер счётчика (по умолчанию METRIKA_COUNTER_ID)'),
   account: accountParam,
 };
@@ -108,8 +125,7 @@ server.registerTool(
     inputSchema: {
       ...commonInput,
       source: z.enum(['organic', 'all']).default('organic'),
-      searchEngine: z.enum(['all', 'yandex', 'google']).default('all')
-        .describe('Дополнительно сузить до конкретного поисковика'),
+      searchEngine: z.enum(['all', 'yandex', 'google']).default('all').describe('Дополнительно сузить до конкретного поисковика'),
       goalIds: z.array(z.number().int()).optional(),
     },
   },
@@ -122,7 +138,7 @@ server.registerTool(
 
     // цели: либо явные, либо все из счётчика
     let goalIds = args.goalIds ?? [];
-    let goalNames = new Map<number, string>();
+    const goalNames = new Map<number, string>();
     if (!goalIds.length) {
       try {
         const cached = goalsCache.get(id);
@@ -150,14 +166,17 @@ server.registerTool(
     const baseMetrics = ['ym:s:visits', 'ym:s:users', 'ym:s:bounceRate', 'ym:s:pageDepth', 'ym:s:avgVisitDurationSeconds'];
     const goalMetrics = goalIds.map((g) => `ym:s:goal${g}reaches`);
 
-    const res = await statQuery({
-      ids: id,
-      'date1': args.startDate,
-      'date2': args.endDate,
-      metrics: [...baseMetrics, ...goalMetrics].join(','),
-      filters: filters.join(' AND '),
-      accuracy: 'full',
-    }, args.account);
+    const res = await statQuery(
+      {
+        ids: id,
+        date1: args.startDate,
+        date2: args.endDate,
+        metrics: [...baseMetrics, ...goalMetrics].join(','),
+        filters: filters.join(' AND '),
+        accuracy: 'full',
+      },
+      args.account,
+    );
 
     const totals = res.totals ?? res.data[0]?.metrics ?? [];
     const goalReaches: Record<string, number> = {};
@@ -189,7 +208,10 @@ server.registerTool(
       'Поисковые фразы (в основном Яндекс — Google шифрует) c поведением по странице входа: ' +
       '{ rows: [{ phrase, visits, bounceRate, avgVisitDurationSeconds }] }.',
     inputSchema: {
-      landingPage: z.string().optional().describe('Страница входа: путь (/oae/dubai/) или полный URL. Без него — органические фразы по всему счётчику'),
+      landingPage: z
+        .string()
+        .optional()
+        .describe('Страница входа: путь (/oae/dubai/) или полный URL. Без него — органические фразы по всему счётчику'),
       startDate: commonInput.startDate,
       endDate: commonInput.endDate,
       counterId: commonInput.counterId,

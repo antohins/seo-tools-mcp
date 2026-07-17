@@ -12,11 +12,17 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
 import {
-  loadSharedEnv, jsonResult, safeHandler, envKey, getConfig,
-  registerAuthTools, registerYandexOauthTools, yandexFetchJson, accountParam,
+  accountParam,
+  getConfig,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  registerYandexOauthTools,
+  safeHandler,
+  yandexFetchJson,
 } from '@seo-tools/shared';
+import { z } from 'zod';
 
 loadSharedEnv();
 
@@ -28,11 +34,16 @@ function ywmGet<T = any>(path: string, account?: string): Promise<T> {
 }
 
 function ywmPost<T = any>(path: string, body: unknown, account?: string): Promise<T> {
-  return yandexFetchJson<T>(TOKEN_ENV, `${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, account);
+  return yandexFetchJson<T>(
+    TOKEN_ENV,
+    `${BASE}${path}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    account,
+  );
 }
 
 // сколько строк максимум тянем для честной сортировки топа (6 API-страниц по 500)
@@ -44,7 +55,9 @@ function resolveHost(hostId?: string, account?: string): string {
   if (!host) {
     throw new Error(
       `Не указан хост Вебмастера${account ? ` для аккаунта «${account}»` : ''}: передай hostId (формат https:example.com:443) ` +
-      'или сохрани дефолт через ywm_set_credentials' + (account ? ` (account="${account}")` : ' (YWM_HOST_ID)') + '. Список хостов — ywm_hosts.',
+        'или сохрани дефолт через ywm_set_credentials' +
+        (account ? ` (account="${account}")` : ' (YWM_HOST_ID)') +
+        '. Список хостов — ywm_hosts.',
     );
   }
   return host;
@@ -106,10 +119,18 @@ function aggregate(stats: NonNullable<QaTextStat['statistics']>) {
   const posValues: number[] = [];
   for (const s of stats) {
     switch (s.field) {
-      case 'IMPRESSIONS': shows += s.value; break;
-      case 'CLICKS': clicks += s.value; break;
-      case 'DEMAND': demand += s.value; break;
-      case 'POSITION': posValues.push(s.value); break;
+      case 'IMPRESSIONS':
+        shows += s.value;
+        break;
+      case 'CLICKS':
+        clicks += s.value;
+        break;
+      case 'DEMAND':
+        demand += s.value;
+        break;
+      case 'POSITION':
+        posValues.push(s.value);
+        break;
     }
   }
   // позиция: простое среднее по дням (повзвесить на показы построчно API не даёт)
@@ -125,25 +146,34 @@ function aggregate(stats: NonNullable<QaTextStat['statistics']>) {
 
 const server = new McpServer({ name: 'ywm', version: '1.0.0' });
 
-registerAuthTools(server, 'ywm', [
-  { env: 'YANDEX_OAUTH_TOKEN', label: 'Общий OAuth-токен Яндекса (Вебмастер+Метрика)', required: false },
-  { env: 'YWM_OAUTH_TOKEN', label: 'Отдельный токен Вебмастера (перекрывает общий; обычно не нужен)', required: false },
-  { env: 'YANDEX_CLIENT_ID', label: 'ClientID OAuth-приложения Яндекса (для авторизации/refresh)', secret: false, required: false },
-  { env: 'YANDEX_CLIENT_SECRET', label: 'Client secret OAuth-приложения Яндекса', required: false },
-  { env: 'YWM_HOST_ID', label: 'Хост по умолчанию (формат https:example.com:443)', secret: false, required: false },
-  { env: 'YWM_USER_ID', label: 'user_id Вебмастера (определяется автоматически, можно не задавать)', secret: false, required: false },
-], {
-  help:
-    'Нужен OAuth-токен со scope Вебмастера. Быстрый путь: ywm_oauth_start (регистрация приложения на ' +
-    'oauth.yandex.ru/client/new: Веб-сервисы, Redirect URI https://oauth.yandex.ru/verification_code, ' +
-    'права «Яндекс.Вебмастер»: hostinfo + verify; + «Яндекс.Метрика»: чтение — тогда один токен на оба сервера) → ' +
-    'пользователь открывает ссылку → код → ywm_oauth_finish. Проверка — ywm_hosts. ' +
-    'ВНИМАНИЕ: токен должен быть или YANDEX_OAUTH_TOKEN (общий), или YWM_OAUTH_TOKEN.',
-  requireAnyOf: [['YANDEX_OAUTH_TOKEN', 'YWM_OAUTH_TOKEN']],
-  onSave: () => { cachedUsers.clear(); },
-});
+registerAuthTools(
+  server,
+  'ywm',
+  [
+    { env: 'YANDEX_OAUTH_TOKEN', label: 'Общий OAuth-токен Яндекса (Вебмастер+Метрика)', required: false },
+    { env: 'YWM_OAUTH_TOKEN', label: 'Отдельный токен Вебмастера (перекрывает общий; обычно не нужен)', required: false },
+    { env: 'YANDEX_CLIENT_ID', label: 'ClientID OAuth-приложения Яндекса (для авторизации/refresh)', secret: false, required: false },
+    { env: 'YANDEX_CLIENT_SECRET', label: 'Client secret OAuth-приложения Яндекса', required: false },
+    { env: 'YWM_HOST_ID', label: 'Хост по умолчанию (формат https:example.com:443)', secret: false, required: false },
+    { env: 'YWM_USER_ID', label: 'user_id Вебмастера (определяется автоматически, можно не задавать)', secret: false, required: false },
+  ],
+  {
+    help:
+      'Нужен OAuth-токен со scope Вебмастера. Быстрый путь: ywm_oauth_start (регистрация приложения на ' +
+      'oauth.yandex.ru/client/new: Веб-сервисы, Redirect URI https://oauth.yandex.ru/verification_code, ' +
+      'права «Яндекс.Вебмастер»: hostinfo + verify; + «Яндекс.Метрика»: чтение — тогда один токен на оба сервера) → ' +
+      'пользователь открывает ссылку → код → ywm_oauth_finish. Проверка — ywm_hosts. ' +
+      'ВНИМАНИЕ: токен должен быть или YANDEX_OAUTH_TOKEN (общий), или YWM_OAUTH_TOKEN.',
+    requireAnyOf: [['YANDEX_OAUTH_TOKEN', 'YWM_OAUTH_TOKEN']],
+    onSave: () => {
+      cachedUsers.clear();
+    },
+  },
+);
 
-registerYandexOauthTools(server, 'ywm', 'Яндекс.Вебмастер (hostinfo + verify), опционально + Метрика (чтение)', () => { cachedUsers.clear(); });
+registerYandexOauthTools(server, 'ywm', 'Яндекс.Вебмастер (hostinfo + verify), опционально + Метрика (чтение)', () => {
+  cachedUsers.clear();
+});
 
 const deviceParam = z.enum(['ALL', 'DESKTOP', 'MOBILE_AND_TABLET', 'MOBILE', 'TABLET']).default('ALL');
 
@@ -174,7 +204,9 @@ server.registerTool(
       url: z.string().optional().describe('Путь или URL страницы; пусто = весь хост'),
       urlMatch: z.enum(['TEXT_CONTAINS', 'TEXT_MATCH']).default('TEXT_CONTAINS'),
       device: deviceParam,
-      orderBy: z.enum(['IMPRESSIONS', 'CLICKS', 'CTR', 'POSITION', 'DEMAND']).default('IMPRESSIONS')
+      orderBy: z
+        .enum(['IMPRESSIONS', 'CLICKS', 'CTR', 'POSITION', 'DEMAND'])
+        .default('IMPRESSIONS')
         .describe('Поле сортировки результата (после агрегации)'),
       limit: z.number().int().min(1).max(3000).default(500),
       hostId: z.string().optional().describe('Хост (по умолчанию YWM_HOST_ID из конфига)'),
@@ -204,7 +236,11 @@ server.registerTool(
       ...aggregate(it.statistics ?? []),
     }));
     const key = { IMPRESSIONS: 'shows', CLICKS: 'clicks', CTR: 'ctr', POSITION: 'position', DEMAND: 'demand' }[args.orderBy] as
-      'shows' | 'clicks' | 'ctr' | 'position' | 'demand';
+      | 'shows'
+      | 'clicks'
+      | 'ctr'
+      | 'position'
+      | 'demand';
     rows = rows.sort((a, b) => {
       const av = a[key] ?? Number.POSITIVE_INFINITY;
       const bv = b[key] ?? Number.POSITIVE_INFINITY;
@@ -217,7 +253,10 @@ server.registerTool(
       totalQueries: count,
       rowCount: rows.length,
       ...(count > SORT_FETCH_CAP
-        ? { approximate: true, note: `запросов ${count} > ${SORT_FETCH_CAP}: топ отсортирован по первым ${SORT_FETCH_CAP} строкам выборки API` }
+        ? {
+            approximate: true,
+            note: `запросов ${count} > ${SORT_FETCH_CAP}: топ отсортирован по первым ${SORT_FETCH_CAP} строкам выборки API`,
+          }
         : {}),
       rows,
     });
@@ -259,13 +298,10 @@ server.registerTool(
         shows: r.shows,
         clicks: r.clicks,
         position: r.position,
-        reason: r.clicks === 0 && r.shows > 0
-          ? 'показы без кликов'
-          : r.position !== null && r.position > 10
-            ? 'позиция за топ-10'
-            : 'есть спрос',
+        reason:
+          r.clicks === 0 && r.shows > 0 ? 'показы без кликов' : r.position !== null && r.position > 10 ? 'позиция за топ-10' : 'есть спрос',
       }))
-      .sort((a, b) => (b.demand - a.demand) || (b.shows - a.shows))
+      .sort((a, b) => b.demand - a.demand || b.shows - a.shows)
       .slice(0, args.limit);
     return jsonResult({
       hostId,
@@ -286,8 +322,14 @@ server.registerTool(
     inputSchema: {
       orderBy: z.enum(['TOTAL_SHOWS', 'TOTAL_CLICKS']).default('TOTAL_SHOWS'),
       device: deviceParam,
-      dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-      dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      dateFrom: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+      dateTo: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
       limit: z.number().int().min(1).max(3000).default(500),
       hostId: z.string().optional().describe('Хост (по умолчанию YWM_HOST_ID из конфига)'),
       account: accountParam,

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { collectRows } from '../servers/gsc/src/paginate.js';
 
 /** Фейковый источник страниц: total строк, отдаёт [startRow .. startRow+rowLimit-1]. */

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { isDeadGrant } from '../shared/src/yandex-oauth.js';
+import { describe, expect, it } from 'vitest';
 import { HttpError } from '../shared/src/http.js';
+import { isDeadGrant } from '../shared/src/yandex-oauth.js';
 
 const httpErr = (status: number, body: string) => new HttpError(status, 'https://oauth.yandex.ru/token', body);
 

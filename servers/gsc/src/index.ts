@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { randomUUID } from 'node:crypto';
+import { chmodSync, writeFileSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import { join } from 'node:path';
 /**
  * gsc-mcp — Google Search Console (Search Analytics) для SEO-пайплайна.
  * Авторизация (любой из двух путей):
@@ -10,13 +14,23 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
+import {
+  accountParam,
+  CONFIG_DIR,
+  envKey,
+  envOr,
+  fetchJson,
+  getConfig,
+  HttpError,
+  jsonResult,
+  loadSharedEnv,
+  maskSecret,
+  registerAuthTools,
+  safeHandler,
+  saveEnvValues,
+} from '@seo-tools/shared';
 import { JWT } from 'google-auth-library';
-import { writeFileSync, chmodSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { loadSharedEnv, requireEnv, envOr, envKey, getConfig, HttpError, fetchJson, jsonResult, safeHandler, registerAuthTools, accountParam, saveEnvValues, maskSecret, CONFIG_DIR } from '@seo-tools/shared';
+import { z } from 'zod';
 import { collectRows } from './paginate.js';
 
 loadSharedEnv();
@@ -33,7 +47,9 @@ function resolveSite(siteUrl?: string, account?: string): string {
   if (!site) {
     throw new Error(
       `Не указано свойство GSC${account ? ` для аккаунта «${account}»` : ''}: передай siteUrl (например sc-domain:example.com) ` +
-      'или сохрани дефолт через gsc_set_credentials' + (account ? ` (account="${account}")` : ' (GSC_SITE_URL)') + '. Список доступных — gsc_list_sites.',
+        'или сохрани дефолт через gsc_set_credentials' +
+        (account ? ` (account="${account}")` : ' (GSC_SITE_URL)') +
+        '. Список доступных — gsc_list_sites.',
     );
   }
   return site;
@@ -53,7 +69,9 @@ function googleClientCreds(account?: string): { clientId: string; clientSecret: 
   const clientId = envOr('GOOGLE_CLIENT_ID', account);
   const clientSecret = envOr('GOOGLE_CLIENT_SECRET', account);
   if (!clientId || !clientSecret) {
-    throw new Error('Нет GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET — создай OAuth client (Desktop app) в console.cloud.google.com и передай в gsc_oauth_start.');
+    throw new Error(
+      'Нет GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET — создай OAuth client (Desktop app) в console.cloud.google.com и передай в gsc_oauth_start.',
+    );
   }
   return { clientId, clientSecret };
 }
@@ -77,7 +95,9 @@ async function getAccessToken(account?: string): Promise<string> {
       }).toString(),
     }).catch((err) => {
       if (err instanceof HttpError && err.bodySnippet.includes('invalid_grant')) {
-        throw new Error('Google отверг refresh-токен (invalid_grant) — токен отозван или истёк (Testing-режим = 7 дней). Переавторизуйся: gsc_oauth_start → gsc_oauth_finish.');
+        throw new Error(
+          'Google отверг refresh-токен (invalid_grant) — токен отозван или истёк (Testing-режим = 7 дней). Переавторизуйся: gsc_oauth_start → gsc_oauth_finish.',
+        );
       }
       throw err;
     });
@@ -90,8 +110,8 @@ async function getAccessToken(account?: string): Promise<string> {
   if (!keyFile) {
     throw new Error(
       `Нет авторизации GSC${account ? ` для аккаунта «${account}»` : ''}. ` +
-      `Либо OAuth: gsc_oauth_start${account ? ` (account="${account}")` : ''} → ссылка → gsc_oauth_finish (токен видит все свойства аккаунта), ` +
-      'либо сервис-аккаунт: gsc_save_sa_json / gsc_set_credentials (GSC_SA_JSON) + добавить его email в каждое свойство.',
+        `Либо OAuth: gsc_oauth_start${account ? ` (account="${account}")` : ''} → ссылка → gsc_oauth_finish (токен видит все свойства аккаунта), ` +
+        'либо сервис-аккаунт: gsc_save_sa_json / gsc_set_credentials (GSC_SA_JSON) + добавить его email в каждое свойство.',
     );
   }
   const cached = jwtClients.get(cacheKey);
@@ -126,9 +146,11 @@ function startLoopback(): Promise<boolean> {
       const matches = Boolean(code) && Boolean(pendingFlow) && state === pendingFlow!.state;
       if (matches) pendingFlow!.code = code;
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(matches
-        ? '<h2>Код получен ✓</h2><p>Вернись в чат и вызови gsc_oauth_finish (код подхватится автоматически).</p>'
-        : '<h2>Код не принят</h2><p>Этот редирект не относится к текущей авторизации — повтори gsc_oauth_start и используй свежую ссылку.</p>');
+      res.end(
+        matches
+          ? '<h2>Код получен ✓</h2><p>Вернись в чат и вызови gsc_oauth_finish (код подхватится автоматически).</p>'
+          : '<h2>Код не принят</h2><p>Этот редирект не относится к текущей авторизации — повтори gsc_oauth_start и используй свежую ссылку.</p>',
+      );
     });
     srv.once('error', () => {
       loopback = null;
@@ -179,39 +201,58 @@ interface GscRow {
   position: number;
 }
 
-function queryAll(siteUrl: string, body: Record<string, unknown>, limit: number, account?: string): Promise<{ rows: GscRow[]; truncated: boolean }> {
+function queryAll(
+  siteUrl: string,
+  body: Record<string, unknown>,
+  limit: number,
+  account?: string,
+): Promise<{ rows: GscRow[]; truncated: boolean }> {
   const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
   // логика пагинации — в collectRows (тестируется отдельно); здесь только реальный fetch страницы
-  return collectRows<GscRow>(async (rowLimit, startRow) => {
-    const page = await gscFetch<{ rows?: GscRow[] }>(url, {
-      method: 'POST',
-      body: JSON.stringify({ ...body, rowLimit, startRow }),
-      attempts: 2, // длинный таймаут × 3 ретрая × 401-повтор × страницы иначе висит минутами
-    }, account);
-    return page.rows ?? [];
-  }, limit, PAGE_SIZE, QUERY_DEADLINE_MS);
+  return collectRows<GscRow>(
+    async (rowLimit, startRow) => {
+      const page = await gscFetch<{ rows?: GscRow[] }>(
+        url,
+        {
+          method: 'POST',
+          body: JSON.stringify({ ...body, rowLimit, startRow }),
+          attempts: 2, // длинный таймаут × 3 ретрая × 401-повтор × страницы иначе висит минутами
+        },
+        account,
+      );
+      return page.rows ?? [];
+    },
+    limit,
+    PAGE_SIZE,
+    QUERY_DEADLINE_MS,
+  );
 }
 
 const server = new McpServer({ name: 'gsc', version: '1.0.0' });
 
-registerAuthTools(server, 'gsc', [
-  { env: 'GOOGLE_CLIENT_ID', label: 'OAuth client ID из Google Cloud (для пути OAuth)', secret: false, required: false },
-  { env: 'GOOGLE_CLIENT_SECRET', label: 'OAuth client secret из Google Cloud', required: false },
-  { env: 'GSC_REFRESH_TOKEN', label: 'Refresh-токен OAuth (получается через gsc_oauth_start/finish)', required: false },
-  { env: 'GSC_SA_JSON', label: 'Путь к JSON-ключу сервис-аккаунта (альтернативный путь)', secret: false, required: false },
-  { env: 'GSC_SITE_URL', label: 'Свойство GSC по умолчанию (sc-domain:example.com)', secret: false, required: false },
-], {
-  help:
-    'Два пути. РЕКОМЕНДУЕМЫЙ — OAuth (токен видит ВСЕ свойства твоего Google-аккаунта, ничего не надо добавлять по-сайтово): ' +
-    '1) console.cloud.google.com → проект → включить Google Search Console API; ' +
-    '2) APIs & Services → OAuth consent screen: External, добавить себя в Test users (или Publish app для долгоживущего токена); ' +
-    '3) Credentials → Create credentials → OAuth client ID → тип Desktop app → взять client ID и secret; ' +
-    '4) gsc_oauth_start → открыть ссылку → разрешить → gsc_oauth_finish. ' +
-    'АЛЬТЕРНАТИВА — сервис-аккаунт (для кронов): IAM → Service Accounts → JSON-ключ → gsc_save_sa_json → добавить email аккаунта в каждое свойство GSC. ' +
-    'Проверка — gsc_list_sites.',
-  requireAnyOf: [['GSC_REFRESH_TOKEN', 'GSC_SA_JSON']],
-  onSave: resetAuthCaches,
-});
+registerAuthTools(
+  server,
+  'gsc',
+  [
+    { env: 'GOOGLE_CLIENT_ID', label: 'OAuth client ID из Google Cloud (для пути OAuth)', secret: false, required: false },
+    { env: 'GOOGLE_CLIENT_SECRET', label: 'OAuth client secret из Google Cloud', required: false },
+    { env: 'GSC_REFRESH_TOKEN', label: 'Refresh-токен OAuth (получается через gsc_oauth_start/finish)', required: false },
+    { env: 'GSC_SA_JSON', label: 'Путь к JSON-ключу сервис-аккаунта (альтернативный путь)', secret: false, required: false },
+    { env: 'GSC_SITE_URL', label: 'Свойство GSC по умолчанию (sc-domain:example.com)', secret: false, required: false },
+  ],
+  {
+    help:
+      'Два пути. РЕКОМЕНДУЕМЫЙ — OAuth (токен видит ВСЕ свойства твоего Google-аккаунта, ничего не надо добавлять по-сайтово): ' +
+      '1) console.cloud.google.com → проект → включить Google Search Console API; ' +
+      '2) APIs & Services → OAuth consent screen: External, добавить себя в Test users (или Publish app для долгоживущего токена); ' +
+      '3) Credentials → Create credentials → OAuth client ID → тип Desktop app → взять client ID и secret; ' +
+      '4) gsc_oauth_start → открыть ссылку → разрешить → gsc_oauth_finish. ' +
+      'АЛЬТЕРНАТИВА — сервис-аккаунт (для кронов): IAM → Service Accounts → JSON-ключ → gsc_save_sa_json → добавить email аккаунта в каждое свойство GSC. ' +
+      'Проверка — gsc_list_sites.',
+    requireAnyOf: [['GSC_REFRESH_TOKEN', 'GSC_SA_JSON']],
+    onSave: resetAuthCaches,
+  },
+);
 
 server.registerTool(
   'gsc_oauth_start',
@@ -257,9 +298,13 @@ server.registerTool(
       ready: true,
       account: args.account ?? null,
       authorizeUrl: `https://accounts.google.com/o/oauth2/v2/auth?${qs}`,
-      next: (listenerOk
-        ? 'Пользователь открывает ссылку' + (args.account ? ` под Google-аккаунтом профиля «${args.account}»` : '') + ', разрешает доступ — браузер редиректнется на localhost и код будет подхвачен. Затем вызвать gsc_oauth_finish' + (args.account ? ` с account="${args.account}"` : ' без аргументов') + '.'
-        : `Порт ${OAUTH_PORT} занят (другой процесс?): после согласия скопировать параметр code из адресной строки (localhost:${OAUTH_PORT}/?code=...) и передать в gsc_oauth_finish. Либо задать другой порт через GSC_OAUTH_PORT.`),
+      next: listenerOk
+        ? 'Пользователь открывает ссылку' +
+          (args.account ? ` под Google-аккаунтом профиля «${args.account}»` : '') +
+          ', разрешает доступ — браузер редиректнется на localhost и код будет подхвачен. Затем вызвать gsc_oauth_finish' +
+          (args.account ? ` с account="${args.account}"` : ' без аргументов') +
+          '.'
+        : `Порт ${OAUTH_PORT} занят (другой процесс?): после согласия скопировать параметр code из адресной строки (localhost:${OAUTH_PORT}/?code=...) и передать в gsc_oauth_finish. Либо задать другой порт через GSC_OAUTH_PORT.`,
     });
   }),
 );
@@ -281,7 +326,7 @@ server.registerTool(
     if (pendingFlow && account !== pendingFlow.account) {
       throw new Error(
         `Текущая авторизация запущена для профиля «${pendingFlow.account ?? 'основной'}», а finish вызван с «${account ?? 'основной'}». ` +
-        'Заверши тот flow или повтори gsc_oauth_start с нужным account.',
+          'Заверши тот flow или повтори gsc_oauth_start с нужным account.',
       );
     }
     const code = args.code?.trim() || pendingFlow?.code;
@@ -345,8 +390,12 @@ server.registerTool(
     chmodSync(file, 0o600);
     saveEnvValues({ [envKey('GSC_SA_JSON', args.account)]: file });
     resetAuthCaches();
-    return jsonResult({ ok: true, savedTo: file, serviceAccountEmail: parsed.client_email,
-      next: 'Добавь этот email в GSC → Настройки → Пользователи и права (права «Полный»), затем проверь gsc_list_sites.' });
+    return jsonResult({
+      ok: true,
+      savedTo: file,
+      serviceAccountEmail: parsed.client_email,
+      next: 'Добавь этот email в GSC → Настройки → Пользователи и права (права «Полный»), затем проверь gsc_list_sites.',
+    });
   }),
 );
 
@@ -361,13 +410,17 @@ server.registerTool(
     inputSchema: {
       siteUrl: z.string().optional().describe('Свойство GSC, например sc-domain:example.com (по умолчанию GSC_SITE_URL из конфига)'),
       page: z.string().optional().describe('Точный URL страницы для фильтра, например https://example.com/page/'),
-      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD'),
-      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('YYYY-MM-DD'),
-      dimensions: z.array(z.enum(['query', 'page', 'device', 'country', 'date', 'searchAppearance']))
-        .default(['query']),
+      startDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .describe('YYYY-MM-DD'),
+      endDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .describe('YYYY-MM-DD'),
+      dimensions: z.array(z.enum(['query', 'page', 'device', 'country', 'date', 'searchAppearance'])).default(['query']),
       searchType: z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews']).default('web'),
-      rowLimit: z.number().int().min(1).max(200_000).default(5000)
-        .describe('Сколько строк собрать суммарно (пагинация автоматическая)'),
+      rowLimit: z.number().int().min(1).max(200_000).default(5000).describe('Сколько строк собрать суммарно (пагинация автоматическая)'),
       account: accountParam,
     },
   },
@@ -381,9 +434,7 @@ server.registerTool(
       dataState: 'final',
     };
     if (args.page) {
-      body.dimensionFilterGroups = [
-        { filters: [{ dimension: 'page', operator: 'equals', expression: args.page }] },
-      ];
+      body.dimensionFilterGroups = [{ filters: [{ dimension: 'page', operator: 'equals', expression: args.page }] }];
     }
     const { rows: raw, truncated } = await queryAll(siteUrl, body, args.rowLimit, args.account);
     const rows = raw.map((r) => {
@@ -398,8 +449,18 @@ server.registerTool(
       });
       return out;
     });
-    console.error(`[gsc] ${siteUrl} ${args.startDate}..${args.endDate} dims=${args.dimensions.join(',')} → ${rows.length} строк${truncated ? ' (обрезано по rowLimit)' : ''}`);
-    return jsonResult({ siteUrl, startDate: args.startDate, endDate: args.endDate, dimensions: args.dimensions, rowCount: rows.length, truncated, rows });
+    console.error(
+      `[gsc] ${siteUrl} ${args.startDate}..${args.endDate} dims=${args.dimensions.join(',')} → ${rows.length} строк${truncated ? ' (обрезано по rowLimit)' : ''}`,
+    );
+    return jsonResult({
+      siteUrl,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      dimensions: args.dimensions,
+      rowCount: rows.length,
+      truncated,
+      rows,
+    });
   }),
 );
 

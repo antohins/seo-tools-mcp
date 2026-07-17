@@ -7,14 +7,14 @@
  * спрашивает значения у пользователя в чате → set_credentials → работает дальше.
  * Готовность (ready) учитывает и основной профиль, и именованные аккаунты.
  */
-import { z } from 'zod';
+
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import { accountsFor, ENV_FILE, envKey, getConfig, hasRealEnvOverride, maskSecret, readConfigFile, saveEnvValues } from './config.js';
 import { jsonResult, safeHandler } from './mcp.js';
-import { saveEnvValues, maskSecret, ENV_FILE, envKey, accountsFor, getConfig, hasRealEnvOverride, readConfigFile } from './config.js';
 
 /** Общий zod-параметр account для рабочих инструментов всех серверов. */
-export const accountParam = z.string().optional()
-  .describe('Аккаунт-профиль (мультиаккаунт, см. *_auth_status); пусто = основной');
+export const accountParam = z.string().optional().describe('Аккаунт-профиль (мультиаккаунт, см. *_auth_status); пусто = основной');
 
 export interface CredSpec {
   /** имя env-переменной */
@@ -39,11 +39,8 @@ export interface AuthToolsOptions {
 export function registerAuthTools(server: McpServer, prefix: string, creds: CredSpec[], opts: AuthToolsOptions): void {
   /** Готов ли профиль account (undefined = основной): required-креды + anyOf-группы. */
   const profileReady = (account?: string): boolean => {
-    const requiredOk = creds
-      .filter((c) => c.required !== false)
-      .every((c) => Boolean(getConfig(c.env, account)));
-    const groupsOk = (opts.requireAnyOf ?? [])
-      .every((group) => group.some((env) => Boolean(getConfig(env, account))));
+    const requiredOk = creds.filter((c) => c.required !== false).every((c) => Boolean(getConfig(c.env, account)));
+    const groupsOk = (opts.requireAnyOf ?? []).every((group) => group.some((env) => Boolean(getConfig(env, account))));
     return requiredOk && groupsOk;
   };
 
@@ -104,8 +101,7 @@ export function registerAuthTools(server: McpServer, prefix: string, creds: Cred
 
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const c of creds) shape[c.env] = z.string().optional().describe(c.label);
-  shape.account = z.string().optional()
-    .describe('Имя аккаунта-профиля (мультиаккаунт): ключи сохранятся с суффиксом __<account>');
+  shape.account = z.string().optional().describe('Имя аккаунта-профиля (мультиаккаунт): ключи сохранятся с суффиксом __<account>');
 
   server.registerTool(
     `${prefix}_set_credentials`,
@@ -121,7 +117,7 @@ export function registerAuthTools(server: McpServer, prefix: string, creds: Cred
       const overridden: string[] = [];
       for (const c of creds) {
         const v = args[c.env];
-        if (v && v.trim()) {
+        if (v?.trim()) {
           values[envKey(c.env, args.account)] = v.trim();
           if (hasRealEnvOverride(c.env, args.account)) overridden.push(envKey(c.env, args.account));
         }
@@ -134,7 +130,9 @@ export function registerAuthTools(server: McpServer, prefix: string, creds: Cred
         account: args.account ?? null,
         envFile: file,
         ...(overridden.length
-          ? { warning: `Ключи ${overridden.join(', ')} перекрыты реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.` }
+          ? {
+              warning: `Ключи ${overridden.join(', ')} перекрыты реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.`,
+            }
           : {}),
       });
     }),

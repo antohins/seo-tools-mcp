@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { escFilter, landingFilter } from '../servers/metrika/src/filters.js';
 import { collectAllPages, rowKey, type StatResponse } from '../servers/metrika/src/paginate.js';
-import { landingFilter, escFilter } from '../servers/metrika/src/filters.js';
 
 const mkRow = (name: string) => ({ dimensions: [{ name }], metrics: [] });
 const names = (r: StatResponse) => r.data.map((d) => d.dimensions[0].name);

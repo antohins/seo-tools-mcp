@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { parseDocs } from '../servers/xmlstock/src/parse.js';
 
 /** Собирает структуру ответа XMLStock из массива doc-ов одной группы. */
@@ -20,23 +20,14 @@ describe('parseDocs', () => {
   });
 
   it('SERP-фичи считаются в packs даже без url', () => {
-    const doc = docWith([
-      { contenttype: 'video' },
-      { contenttype: 'images', url: 'not-a-url' },
-      { url: 'https://a.ru/1' },
-    ]);
+    const doc = docWith([{ contenttype: 'video' }, { contenttype: 'images', url: 'not-a-url' }, { url: 'https://a.ru/1' }]);
     const { docs, packs } = parseDocs(doc);
     expect(packs.sort()).toEqual(['images', 'video']);
     expect(docs).toHaveLength(1); // только органика
   });
 
   it('битый организм-doc (url без http) отбрасывается, позиции не сдвигаются', () => {
-    const doc = docWith([
-      { url: '' },
-      { url: 'https://a.ru/1' },
-      { url: 'ftp://x' },
-      { url: 'https://b.ru/2' },
-    ]);
+    const doc = docWith([{ url: '' }, { url: 'https://a.ru/1' }, { url: 'ftp://x' }, { url: 'https://b.ru/2' }]);
     const { docs } = parseDocs(doc);
     expect(docs.map((d) => d.domain)).toEqual(['a.ru', 'b.ru']);
     expect(docs.map((d) => d.position)).toEqual([1, 2]);

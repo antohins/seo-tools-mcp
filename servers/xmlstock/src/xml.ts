@@ -42,7 +42,9 @@ export function extractBolds(raw: string | undefined): string[] {
   const re = /<hlword>(.*?)<\/hlword>/gis;
   let m: RegExpExecArray | null;
   while ((m = re.exec(merged)) !== null) {
-    const text = decodeEntities(m[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+    const text = decodeEntities(m[1].replace(/<[^>]+>/g, ''))
+      .replace(/\s+/g, ' ')
+      .trim();
     if (text) bolds.push(text);
   }
   return bolds;

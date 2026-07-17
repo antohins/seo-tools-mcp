@@ -1,20 +1,21 @@
-import { describe, it, expect } from 'vitest';
-import { maskUrl, maskSecret } from '../shared/src/config.js';
+import { describe, expect, it } from 'vitest';
+import { envKey, maskSecret, maskUrl, validateAccount } from '../shared/src/config.js';
 import { HttpError } from '../shared/src/http.js';
-import { validateAccount, envKey } from '../shared/src/config.js';
 import { resolveRegionId, resolveRegionIds, YANDEX_REGIONS } from '../shared/src/yandex-regions.js';
 
 describe('maskUrl', () => {
   it('маскирует секретные query-параметры', () => {
-    expect(maskUrl('https://xmlstock.com/?user=1&key=SECRET&query=cats'))
-      .toBe('https://xmlstock.com/?user=REDACTED&key=REDACTED&query=cats');
+    expect(maskUrl('https://xmlstock.com/?user=1&key=SECRET&query=cats')).toBe(
+      'https://xmlstock.com/?user=REDACTED&key=REDACTED&query=cats',
+    );
   });
   it('маскирует userinfo (basic-auth)', () => {
     expect(maskUrl('https://u:p@host.com/x')).toBe('https://REDACTED:REDACTED@host.com/x');
   });
   it('маскирует client_secret/refresh_token', () => {
-    expect(maskUrl('https://oauth.yandex.ru/token?client_secret=CS&refresh_token=RT'))
-      .toBe('https://oauth.yandex.ru/token?client_secret=REDACTED&refresh_token=REDACTED');
+    expect(maskUrl('https://oauth.yandex.ru/token?client_secret=CS&refresh_token=RT')).toBe(
+      'https://oauth.yandex.ru/token?client_secret=REDACTED&refresh_token=REDACTED',
+    );
   });
   it('не трогает несекретный URL', () => {
     const u = 'https://example.com/page?p=2';
@@ -70,7 +71,7 @@ describe('validateAccount / envKey', () => {
 describe('yandex-regions', () => {
   it('имя региона → id', () => {
     expect(resolveRegionId('Москва')).toBe(213);
-    expect(resolveRegionId('россия')).toBe(YANDEX_REGIONS['россия']);
+    expect(resolveRegionId('россия')).toBe(YANDEX_REGIONS.россия);
   });
   it('числовой id пропускается как есть', () => {
     expect(resolveRegionId('213')).toBe(213);

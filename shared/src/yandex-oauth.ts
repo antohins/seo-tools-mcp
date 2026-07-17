@@ -10,12 +10,13 @@
  * для случая раздельных приложений; авто-refresh на них НЕ распространяется
  * (общий refresh-токен принадлежит другому приложению/scope — подменять нельзя).
  */
-import { z } from 'zod';
+
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { fetchJson, HttpError, type FetchRetryOptions } from './http.js';
-import { jsonResult, safeHandler } from './mcp.js';
-import { saveEnvValues, maskSecret, envKey, accountsFor, getConfig, readConfigFile } from './config.js';
+import { z } from 'zod';
+import { accountsFor, envKey, getConfig, maskSecret, readConfigFile, saveEnvValues } from './config.js';
 import { envOr } from './env.js';
+import { type FetchRetryOptions, fetchJson, HttpError } from './http.js';
+import { jsonResult, safeHandler } from './mcp.js';
 
 const TOKEN_URL = 'https://oauth.yandex.ru/token';
 
@@ -37,15 +38,17 @@ export function getYandexToken(specificEnv: string, account?: string): string {
     const known = accountsFor('YANDEX_OAUTH_TOKEN');
     throw new Error(
       `Нет OAuth-токена Яндекса${account ? ` для аккаунта «${account}»` : ''} ` +
-      `(${envKey(specificEnv, account)} или ${envKey('YANDEX_OAUTH_TOKEN', account)}). ` +
-      (known.length ? `Настроенные аккаунты: ${known.join(', ')}. ` : '') +
-      `Запусти <server>_oauth_start${account ? ` c account="${account}"` : ''} или сохрани готовый токен через <server>_set_credentials.`,
+        `(${envKey(specificEnv, account)} или ${envKey('YANDEX_OAUTH_TOKEN', account)}). ` +
+        (known.length ? `Настроенные аккаунты: ${known.join(', ')}. ` : '') +
+        `Запусти <server>_oauth_start${account ? ` c account="${account}"` : ''} или сохрани готовый токен через <server>_set_credentials.`,
     );
   }
   return token;
 }
 
-async function exchangeToken(params: Record<string, string>): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+async function exchangeToken(
+  params: Record<string, string>,
+): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
   return fetchJson(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -109,7 +112,7 @@ async function tryRefresh(account?: string): Promise<string | null> {
     console.error(`[yandex-oauth] refresh временно не удался (транзиент): ${String(err)}`);
     throw new Error(
       `Не удалось обновить OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} из-за временной ошибки ` +
-      `(${String(err)}). Refresh-токен НЕ протух — повтори запрос позже.`,
+        `(${String(err)}). Refresh-токен НЕ протух — повтори запрос позже.`,
     );
   }
 }
@@ -121,8 +124,7 @@ export async function yandexFetchJson<T = any>(
   opts: FetchRetryOptions = {},
   account?: string,
 ): Promise<T> {
-  const exec = (token: string) =>
-    fetchJson<T>(url, { ...opts, headers: { ...(opts.headers ?? {}), Authorization: `OAuth ${token}` } });
+  const exec = (token: string) => fetchJson<T>(url, { ...opts, headers: { ...(opts.headers ?? {}), Authorization: `OAuth ${token}` } });
 
   const { specific, general } = readTokens(specificTokenEnv, account);
   try {
@@ -136,8 +138,8 @@ export async function yandexFetchJson<T = any>(
     if (usedSpecificForeign) {
       throw new Error(
         `Токен ${envKey(specificTokenEnv, account)} протух. Авто-refresh для отдельного токена не выполняется ` +
-        '(общий YANDEX_REFRESH_TOKEN может принадлежать другому приложению) — обнови его через <server>_set_credentials ' +
-        'или перейди на общий токен: <server>_oauth_start → <server>_oauth_finish.',
+          '(общий YANDEX_REFRESH_TOKEN может принадлежать другому приложению) — обнови его через <server>_set_credentials ' +
+          'или перейди на общий токен: <server>_oauth_start → <server>_oauth_finish.',
       );
     }
     const fresh = await tryRefresh(account);
@@ -149,7 +151,7 @@ export async function yandexFetchJson<T = any>(
         if (err2 instanceof HttpError && err2.status === 401) {
           throw new Error(
             `OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} отклонён (401) даже после обновления по refresh — ` +
-            'вероятно, доступ приложения отозван. Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
+              'вероятно, доступ приложения отозван. Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
           );
         }
         throw err2;
@@ -157,7 +159,7 @@ export async function yandexFetchJson<T = any>(
     }
     throw new Error(
       `OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} протух, а refresh-токена/клиента для обновления нет. ` +
-      'Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
+        'Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
     );
   }
 }
@@ -169,7 +171,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
     {
       description:
         'Шаг 1 авторизации Яндекса: вернёт ссылку, которую пользователь открывает в браузере, ' +
-        'разрешает доступ и получает код подтверждения. Код передать в ' + `${prefix}_oauth_finish. ` +
+        'разрешает доступ и получает код подтверждения. Код передать в ' +
+        `${prefix}_oauth_finish. ` +
         `Требуется OAuth-приложение (oauth.yandex.ru/client/new, Redirect URI: https://oauth.yandex.ru/verification_code, scope: ${scopesHint}). ` +
         'clientId/clientSecret сохраняются для дальнейшего авто-обновления токена (приложение ОБЩЕЕ для всех аккаунтов). ' +
         'account — имя профиля для мультиаккаунта: пользователь авторизуется под ДРУГИМ Яндекс-аккаунтом, токен сохранится отдельно.',
@@ -188,7 +191,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
       if (!clientId) {
         return jsonResult({
           ready: false,
-          action: 'Сначала зарегистрируй приложение на https://oauth.yandex.ru/client/new ' +
+          action:
+            'Сначала зарегистрируй приложение на https://oauth.yandex.ru/client/new ' +
             `(Веб-сервисы, Redirect URI: https://oauth.yandex.ru/verification_code, scope: ${scopesHint}) ` +
             'и передай clientId (+ clientSecret) в этот инструмент.',
         });
@@ -198,7 +202,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
         account: args.account ?? null,
         // force_confirm (выбор аккаунта) — только для именованного профиля; основному аккаунту лишний клик ни к чему
         authorizeUrl: `https://oauth.yandex.ru/authorize?response_type=code&client_id=${clientId}${args.account ? '&force_confirm=yes' : ''}`,
-        next: `Пользователь открывает ссылку под ${args.account ? `Яндекс-аккаунтом профиля «${args.account}»` : 'аккаунтом-владельцем сайта/счётчика'}, ` +
+        next:
+          `Пользователь открывает ссылку под ${args.account ? `Яндекс-аккаунтом профиля «${args.account}»` : 'аккаунтом-владельцем сайта/счётчика'}, ` +
           `разрешает доступ, копирует код подтверждения со страницы и передаёт его в ${prefix}_oauth_finish` +
           `${args.account ? ` вместе с account="${args.account}"` : ''}.`,
         hasClientSecret: Boolean(envOr('YANDEX_CLIENT_SECRET', args.account)),
@@ -231,7 +236,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
       });
       const values: Record<string, string> = { [envKey('YANDEX_OAUTH_TOKEN', args.account)]: data.access_token };
       if (data.refresh_token) values[envKey('YANDEX_REFRESH_TOKEN', args.account)] = data.refresh_token;
-      if (data.expires_in) values[envKey('YANDEX_TOKEN_EXPIRES', args.account)] = new Date(Date.now() + data.expires_in * 1000).toISOString();
+      if (data.expires_in)
+        values[envKey('YANDEX_TOKEN_EXPIRES', args.account)] = new Date(Date.now() + data.expires_in * 1000).toISOString();
       saveEnvValues(values);
       onSave?.();
       return jsonResult({
