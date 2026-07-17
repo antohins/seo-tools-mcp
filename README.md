@@ -234,6 +234,10 @@ pnpm -r publish --access public   # публикует 5 серверов; priva
 
 `pnpm publish` сам подставляет реальные версии вместо `workspace:*` и не даст опубликовать при грязном рабочем дереве. Бамп версии — `pnpm -r exec npm version patch` (или вручную в каждом `package.json`).
 
+## Контрибьютинг
+
+PR приветствуются — см. [CONTRIBUTING.md](CONTRIBUTING.md). История изменений — [CHANGELOG.md](CHANGELOG.md). Уязвимости — приватно через [Security Advisories](https://github.com/antohins/seo-tools-mcp/security/advisories/new) (детали — [SECURITY.md](SECURITY.md)).
+
 ## Лицензия
 
 [MIT](LICENSE) © antohins

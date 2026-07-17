@@ -236,6 +236,10 @@ pnpm -r publish --access public   # publishes the 5 servers; private packages (s
 
 `pnpm publish` substitutes real versions for `workspace:*` and refuses to publish from a dirty tree. Bump versions with `pnpm -r exec npm version patch` (or by hand in each `package.json`).
 
+## Contributing
+
+PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Change history — [CHANGELOG.md](CHANGELOG.md). Vulnerabilities — report privately via [Security Advisories](https://github.com/antohins/seo-tools-mcp/security/advisories/new) (details in [SECURITY.md](SECURITY.md)).
+
 ## License
 
 [MIT](LICENSE) © antohins

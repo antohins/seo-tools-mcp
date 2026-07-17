@@ -1,0 +1,35 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! **Do not paste API keys, tokens, or `.env` contents.**
+  - type: dropdown
+    id: server
+    attributes:
+      label: Which server?
+      options:
+        - xmlstock
+        - wordstat
+        - gsc
+        - ywm
+        - metrika
+        - shared / build / other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what actually happened. Include the tool call and the error text (with secrets removed).
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Node version (`node -v`), how the server is run (npx / from source / remote), MCP client.
+    validations:
+      required: true
