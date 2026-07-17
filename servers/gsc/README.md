@@ -13,8 +13,12 @@ Then set credentials right in the chat: `gsc_auth_status` → `gsc_set_credentia
 
 ## Tools
 
-- `gsc_query`
-- `gsc_list_sites`
+- `gsc_query` — Search Analytics (clicks/impressions/CTR/position), auto-pagination, `dataState` final/all
+- `gsc_inspect_url` — URL Inspection: index status, coverage, canonical, last crawl, mobile usability, rich results
+- `gsc_list_sites` — properties available to the authorization
+- `gsc_get_site` — permission level for a property
+- `gsc_list_sitemaps` — submitted sitemaps with status
+- `gsc_get_sitemap` — details for one sitemap
 
 ---
 

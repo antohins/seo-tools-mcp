@@ -420,6 +420,10 @@ server.registerTool(
         .describe('YYYY-MM-DD'),
       dimensions: z.array(z.enum(['query', 'page', 'device', 'country', 'date', 'searchAppearance'])).default(['query']),
       searchType: z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews']).default('web'),
+      dataState: z
+        .enum(['final', 'all'])
+        .default('final')
+        .describe('final = только финальные данные; all — включая свежие/неполные (последние дни)'),
       rowLimit: z.number().int().min(1).max(200_000).default(5000).describe('Сколько строк собрать суммарно (пагинация автоматическая)'),
       account: accountParam,
     },
@@ -431,7 +435,7 @@ server.registerTool(
       endDate: args.endDate,
       dimensions: args.dimensions,
       type: args.searchType,
-      dataState: 'final',
+      dataState: args.dataState,
     };
     if (args.page) {
       body.dimensionFilterGroups = [{ filters: [{ dimension: 'page', operator: 'equals', expression: args.page }] }];
@@ -479,6 +483,114 @@ server.registerTool(
       args.account,
     );
     return jsonResult({ sites: data.siteEntry ?? [] });
+  }),
+);
+
+server.registerTool(
+  'gsc_get_site',
+  {
+    description: 'Уровень доступа авторизации к конкретному свойству GSC (permissionLevel).',
+    inputSchema: {
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL)'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const siteUrl = resolveSite(args.siteUrl, args.account);
+    const data = await gscFetch<Record<string, unknown>>(
+      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`,
+      {},
+      args.account,
+    );
+    return jsonResult(data);
+  }),
+);
+
+server.registerTool(
+  'gsc_inspect_url',
+  {
+    description:
+      'URL Inspection: индекс-статус конкретного URL в Google — verdict, coverageState, indexingState, ' +
+      'robotsTxtState, время последнего обхода, canonical (Google vs заявленный), crawledAs, ссылки-источники, ' +
+      'а также mobile usability и rich results. URL должен быть под указанным свойством GSC.',
+    inputSchema: {
+      url: z.string().describe('Полный URL для инспекции, например https://example.com/page/'),
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL); для URL-prefix — с завершающим /'),
+      languageCode: z.string().optional().describe('BCP-47 язык результата (по умолчанию en-US)'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const siteUrl = resolveSite(args.siteUrl, args.account);
+    const data = await gscFetch<{ inspectionResult?: Record<string, any> }>(
+      'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',
+      { method: 'POST', body: JSON.stringify({ inspectionUrl: args.url, siteUrl, languageCode: args.languageCode }) },
+      args.account,
+    );
+    const r = data.inspectionResult ?? {};
+    const idx = r.indexStatusResult ?? {};
+    const mob = r.mobileUsabilityResult;
+    const rich = r.richResultsResult;
+    return jsonResult({
+      siteUrl,
+      url: args.url,
+      inspectionResultLink: r.inspectionResultLink ?? null,
+      indexStatus: {
+        verdict: idx.verdict ?? null,
+        coverageState: idx.coverageState ?? null,
+        robotsTxtState: idx.robotsTxtState ?? null,
+        indexingState: idx.indexingState ?? null,
+        lastCrawlTime: idx.lastCrawlTime ?? null,
+        pageFetchState: idx.pageFetchState ?? null,
+        crawledAs: idx.crawledAs ?? null,
+        googleCanonical: idx.googleCanonical ?? null,
+        userCanonical: idx.userCanonical ?? null,
+        sitemap: idx.sitemap ?? [],
+        referringUrls: idx.referringUrls ?? [],
+      },
+      mobileUsability: mob ? { verdict: mob.verdict ?? null, issues: mob.issues ?? [] } : null,
+      richResults: rich ? { verdict: rich.verdict ?? null, detectedItems: rich.detectedItems ?? [] } : null,
+      ampResult: r.ampResult ?? null,
+    });
+  }),
+);
+
+server.registerTool(
+  'gsc_list_sitemaps',
+  {
+    description:
+      'Список сайтмапов свойства GSC со статусом (path, отправлен/скачан, ошибки/предупреждения, содержимое по типам). ' +
+      'sitemapIndex — опционально: перечислить сайтмапы внутри конкретного sitemap-индекса.',
+    inputSchema: {
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL)'),
+      sitemapIndex: z.string().optional().describe('URL sitemap-индекса — вернуть вложенные в него сайтмапы'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const siteUrl = resolveSite(args.siteUrl, args.account);
+    let url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`;
+    if (args.sitemapIndex) url += `?sitemapIndex=${encodeURIComponent(args.sitemapIndex)}`;
+    const data = await gscFetch<{ sitemap?: unknown[] }>(url, {}, args.account);
+    return jsonResult({ siteUrl, count: (data.sitemap ?? []).length, sitemaps: data.sitemap ?? [] });
+  }),
+);
+
+server.registerTool(
+  'gsc_get_sitemap',
+  {
+    description: 'Детали одного сайтмапа свойства GSC (статус, ошибки/предупреждения, последний обход, содержимое по типам).',
+    inputSchema: {
+      feedpath: z.string().describe('Полный URL сайтмапа, например https://example.com/sitemap.xml'),
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL)'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const siteUrl = resolveSite(args.siteUrl, args.account);
+    const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(args.feedpath)}`;
+    const data = await gscFetch<Record<string, unknown>>(url, {}, args.account);
+    return jsonResult({ siteUrl, sitemap: data });
   }),
 );
 

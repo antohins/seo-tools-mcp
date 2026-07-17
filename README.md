@@ -13,7 +13,7 @@
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
-| `gsc` | `gsc_query`, `gsc_list_sites` | OAuth (все свойства аккаунта) / service account |
+| `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_search_queries`, `ywm_recommended_queries`, `ywm_popular` | OAuth (авто-refresh) |
 | `metrika` | `metrika_counters`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (авто-refresh) |
 
