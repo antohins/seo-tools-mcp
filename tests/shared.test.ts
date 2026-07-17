@@ -83,6 +83,13 @@ describe('yandex-regions', () => {
     expect(resolveRegionIds('Москва, Санкт-Петербург')).toEqual(['213', '2']);
     expect(resolveRegionIds('213,2')).toEqual(['213', '2']);
   });
+  it('алиасы и расширенный список городов', () => {
+    expect(resolveRegionId('спб')).toBe(2);
+    expect(resolveRegionId('МСК')).toBe(213);
+    expect(resolveRegionId('Казахстан')).toBe(159);
+    expect(resolveRegionId('Нижний Новгород')).toBe(47);
+    expect(resolveRegionIds('екб, питер')).toEqual(['54', '2']);
+  });
   it('неизвестный регион бросает', () => {
     expect(() => resolveRegionId('Атлантида')).toThrow(/Неизвестный регион/);
   });

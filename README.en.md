@@ -141,7 +141,7 @@ Yandex API limitations (not server bugs): URL filtering in Webmaster exists only
 
 ## Date format and regions
 
-Dates — `YYYY-MM-DD` (MSK). Regions in `xmlstock_serp`: a string ("Москва", "Россия") or a numeric Yandex region ID (213, 225…). Region names are resolved from a built-in list; any numeric Yandex `lr` ID always works.
+Dates — `YYYY-MM-DD` (MSK). Regions (in `xmlstock_serp`, Wordstat, etc.): a name from the built-in list of common regions ("Москва", "спб", "Казахстан"…), several comma-separated, **or** a numeric Yandex region ID (`213`, `225`…) — a numeric ID always works. Full ID directory — the `wordstat_regions_tree` tool.
 
 ## Where and how to use it
 
