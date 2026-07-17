@@ -3,6 +3,8 @@
 [![CI](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+**Русский** | [English](README.en.md)
+
 Пять **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру и Яндекс.Метрике прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
 
 | Сервер | Рабочие инструменты | Авторизация |
