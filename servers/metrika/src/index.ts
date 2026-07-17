@@ -11,15 +11,14 @@ import {
   loadSharedEnv, jsonResult, safeHandler, envKey, getConfig,
   registerAuthTools, registerYandexOauthTools, yandexFetchJson, accountParam,
 } from '@seo-tools/shared';
+import { collectAllPages, type StatResponse } from './paginate.js';
+import { escFilter, landingFilter } from './filters.js';
 
 loadSharedEnv();
 
 const STAT_URL = 'https://api-metrika.yandex.net/stat/v1/data';
 const MGMT_URL = 'https://api-metrika.yandex.net/management/v1';
 const TOKEN_ENV = 'METRIKA_OAUTH_TOKEN';
-
-/** Экранирование значения в выражении фильтра Метрики: \ и ' внутри '...' */
-const escFilter = (s: string): string => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 function counterId(override?: number, account?: string): string {
   if (override) return String(override);
@@ -33,30 +32,9 @@ function counterId(override?: number, account?: string): string {
   return id;
 }
 
-/**
- * Строит фильтр Метрики по странице входа без привязки к origin/домену:
- *  - полный URL (http…) → точное совпадение ym:s:startURL;
- *  - относительный путь → ym:s:startURLPath.
- * Оговорка: startURLPath отбрасывает домен и query-string — для мультидоменного
- * счётчика одинаковые пути разных доменов схлопнутся в одну строку.
- */
-function landingFilter(landing: string): string {
-  const l = landing.trim();
-  const dim = l.startsWith('http') ? 'ym:s:startURL' : 'ym:s:startURLPath';
-  return `${dim}=='${escFilter(l)}'`;
-}
-
 // кеш целей счётчика: цели меняются редко, а goals-запрос шёл перед КАЖДЫМ landing_behavior
 const goalsCache = new Map<string, { ts: number; goals: Array<{ id: number; name: string }> }>();
 const GOALS_TTL_MS = 10 * 60_000;
-
-interface StatResponse {
-  data: Array<{ dimensions: Array<{ name: string }>; metrics: number[] }>;
-  totals?: number[];
-  total_rows?: number;
-  sampled?: boolean;
-  sample_share?: number;
-}
 
 async function statQuery(params: Record<string, string | number | undefined>, account?: string): Promise<StatResponse> {
   const qs = new URLSearchParams();
@@ -66,39 +44,9 @@ async function statQuery(params: Record<string, string | number | undefined>, ac
   return yandexFetchJson<StatResponse>(TOKEN_ENV, `${STAT_URL}?${qs}`, {}, account);
 }
 
-/** Уникальный ключ строки — по именам всех измерений (порядок стабилен внутри отчёта). */
-function rowKey(r: StatResponse['data'][number]): string {
-  return r.dimensions.map((d) => d.name).join(String.fromCharCode(1)); // SOH-разделитель — не встречается в значениях измерений
-}
-
-/** Собирает все строки постранично (limit API — 100 000, ходим шагами по 10 000). */
-async function statQueryAll(params: Record<string, string | number | undefined>, maxRows: number, account?: string): Promise<StatResponse> {
-  const pageSize = Math.min(10_000, maxRows);
-  const first = await statQuery({ ...params, limit: pageSize, offset: 1 }, account); // offset в Метрике 1-based
-  const all = { ...first, data: [...first.data] };
-  const seen = new Set(first.data.map(rowKey));
-  // Офсет двигаем по фактически ПРОЧИТАННЫМ (сырым) строкам, а не на фикс. pageSize:
-  // при accuracy:'full' / на хвосте страница короче limit, шаг pageSize перепрыгнул бы
-  // через непрочитанные строки. Дедуп по ключу измерений страхует от перекрытия окон,
-  // а break при отсутствии новых строк — от зацикливания, если сервер отдаёт одно и то же.
-  let rawFetched = first.data.length;
-  const wanted = Math.min(maxRows, first.total_rows ?? 0);
-  while (all.data.length < wanted) {
-    const page = await statQuery({ ...params, limit: pageSize, offset: rawFetched + 1 }, account);
-    if (!page.data.length) break;
-    rawFetched += page.data.length;
-    let added = 0;
-    for (const r of page.data) {
-      const k = rowKey(r);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      all.data.push(r);
-      added++;
-    }
-    if (!added) break; // страница не принесла новых строк — двигаться дальше некуда
-  }
-  all.data = all.data.slice(0, maxRows);
-  return all;
+/** Тонкая обёртка: постраничный сбор (логика — в collectAllPages, тестируется отдельно). */
+function statQueryAll(params: Record<string, string | number | undefined>, maxRows: number, account?: string): Promise<StatResponse> {
+  return collectAllPages((offset, limit) => statQuery({ ...params, limit, offset }, account), maxRows);
 }
 
 const server = new McpServer({ name: 'metrika', version: '1.0.0' });

@@ -17,10 +17,15 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "LIVE=1 vitest run tests/live"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^4.1.10"
   }
 }

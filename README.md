@@ -1,5 +1,8 @@
 # seo-tools-mcp
 
+[![CI](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Пять **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру и Яндекс.Метрике прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
 
 | Сервер | Рабочие инструменты | Авторизация |
@@ -197,8 +200,12 @@ claude mcp add xmlstock --scope user -- ssh root@SERVER node /opt/seo-tools-mcp/
 ```bash
 pnpm build        # собрать все воркспейсы
 pnpm typecheck    # только типы
+pnpm test         # юнит-тесты (vitest, без сети)
+pnpm test:live    # лайв-смоук по реальным API (нужны креды в конфиге; free-эндпоинты)
 node servers/xmlstock/dist/index.js   # ручной запуск (stdio)
 ```
+
+Юнит-тесты покрывают чистую логику: маскирование секретов, классификацию OAuth-ошибок, пагинацию Метрики/GSC (дедуп, `truncated`), фильтры, парсер SERP, регионы. Лайв-смоук поднимает каждый сервер и дёргает бесплатный инструмент (`xmlstock_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`) — проверка авторизации end-to-end.
 
 Общий код (`shared/`): HTTP-клиент с ретраями на 429/5xx (3 попытки, экспоненциальный backoff, Retry-After), загрузчик env + персистентный конфиг, фабрика auth-инструментов, Яндекс-OAuth с авто-refresh, JSON-хелперы MCP, счётчик расхода платных вызовов. XMLStock дополнительно ретраит свои «временные» коды из тела XML, код 15 («ничего не найдено») трактуется как пустая выдача.
 

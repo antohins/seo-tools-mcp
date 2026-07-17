@@ -17,6 +17,7 @@ import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadSharedEnv, requireEnv, envOr, envKey, getConfig, HttpError, fetchJson, jsonResult, safeHandler, registerAuthTools, accountParam, saveEnvValues, maskSecret, CONFIG_DIR } from '@seo-tools/shared';
+import { collectRows } from './paginate.js';
 
 loadSharedEnv();
 
@@ -177,27 +178,17 @@ interface GscRow {
   position: number;
 }
 
-async function queryAll(siteUrl: string, body: Record<string, unknown>, limit: number, account?: string): Promise<{ rows: GscRow[]; truncated: boolean }> {
+function queryAll(siteUrl: string, body: Record<string, unknown>, limit: number, account?: string): Promise<{ rows: GscRow[]; truncated: boolean }> {
   const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
-  const rows: GscRow[] = [];
-  let startRow = 0;
-  const probe = limit + 1; // тянем на 1 строку больше запрошенного — чтобы отличить «ровно limit» от «есть ещё»
-
-  while (rows.length < probe) {
-    const rowLimit = Math.min(PAGE_SIZE, probe - rows.length);
+  // логика пагинации — в collectRows (тестируется отдельно); здесь только реальный fetch страницы
+  return collectRows<GscRow>(async (rowLimit, startRow) => {
     const page = await gscFetch<{ rows?: GscRow[] }>(url, {
       method: 'POST',
       body: JSON.stringify({ ...body, rowLimit, startRow }),
       attempts: 2, // длинный таймаут × 3 ретрая × 401-повтор × страницы иначе висит минутами
     }, account);
-    const batch = page.rows ?? [];
-    rows.push(...batch);
-    if (batch.length < rowLimit) break; // страница неполная — данных больше нет
-    startRow += batch.length;
-  }
-  // получили лишнюю (limit+1)-ю строку → данные ещё остались; отдаём ровно limit
-  const truncated = rows.length > limit;
-  return { rows: rows.slice(0, limit), truncated };
+    return page.rows ?? [];
+  }, limit, PAGE_SIZE);
 }
 
 const server = new McpServer({ name: 'gsc', version: '1.0.0' });

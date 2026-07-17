@@ -65,7 +65,7 @@ const DEAD_GRANT_CODES = /"error"\s*:\s*"(invalid_grant|invalid_client|unauthori
  *          гнать пользователя на бесполезную переавторизацию нельзя.
  * HttpError уже несёт .status и .bodySnippet, отдельный класс не нужен.
  */
-function isDeadGrant(err: unknown): boolean {
+export function isDeadGrant(err: unknown): boolean {
   if (err instanceof HttpError) {
     if (err.status === 408 || err.status === 429) return false; // rate-limit / request-timeout — транзиент
     if (err.status >= 400 && err.status < 500) return DEAD_GRANT_CODES.test(err.bodySnippet); // 4xx: «мёртв» только по OAuth-коду
