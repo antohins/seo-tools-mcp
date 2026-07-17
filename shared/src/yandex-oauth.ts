@@ -196,7 +196,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
       return jsonResult({
         ready: true,
         account: args.account ?? null,
-        authorizeUrl: `https://oauth.yandex.ru/authorize?response_type=code&client_id=${clientId}&force_confirm=yes`,
+        // force_confirm (выбор аккаунта) — только для именованного профиля; основному аккаунту лишний клик ни к чему
+        authorizeUrl: `https://oauth.yandex.ru/authorize?response_type=code&client_id=${clientId}${args.account ? '&force_confirm=yes' : ''}`,
         next: `Пользователь открывает ссылку под ${args.account ? `Яндекс-аккаунтом профиля «${args.account}»` : 'аккаунтом-владельцем сайта/счётчика'}, ` +
           `разрешает доступ, копирует код подтверждения со страницы и передаёт его в ${prefix}_oauth_finish` +
           `${args.account ? ` вместе с account="${args.account}"` : ''}.`,
