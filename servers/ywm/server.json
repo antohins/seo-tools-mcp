@@ -1,11 +1,13 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.antohins/seo-tools-mcp-ywm",
-  "description": "MCP server for Yandex.Webmaster search queries (read-only)",
+  "title": "SEO Tools: Yandex.Webmaster",
+  "description": "MCP server for Yandex.Webmaster search queries (read-only).",
   "repository": {
     "url": "https://github.com/antohins/seo-tools-mcp",
     "source": "github"
   },
+  "websiteUrl": "https://github.com/antohins/seo-tools-mcp#readme",
   "version": "1.0.1",
   "packages": [
     {
@@ -14,7 +16,23 @@
       "version": "1.0.1",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "YANDEX_OAUTH_TOKEN",
+          "description": "Yandex OAuth token (shared Webmaster + Metrica); or obtain via ywm_oauth_start.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "YWM_HOST_ID",
+          "description": "Default Webmaster host, format https:example.com:443.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
     }
   ]
 }

@@ -1,11 +1,13 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.antohins/seo-tools-mcp-gsc",
-  "description": "MCP server for Google Search Console (Search Analytics, read-only)",
+  "title": "SEO Tools: Google Search Console",
+  "description": "MCP server for Google Search Console Search Analytics (read-only, OAuth or service account).",
   "repository": {
     "url": "https://github.com/antohins/seo-tools-mcp",
     "source": "github"
   },
+  "websiteUrl": "https://github.com/antohins/seo-tools-mcp#readme",
   "version": "1.0.1",
   "packages": [
     {
@@ -14,7 +16,37 @@
       "version": "1.0.1",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "GOOGLE_CLIENT_ID",
+          "description": "Google OAuth client ID (Desktop app).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "GOOGLE_CLIENT_SECRET",
+          "description": "Google OAuth client secret.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GSC_REFRESH_TOKEN",
+          "description": "Google OAuth refresh token (or obtain via gsc_oauth_start).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "GSC_SITE_URL",
+          "description": "Default GSC property, e.g. sc-domain:example.com.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
     }
   ]
 }

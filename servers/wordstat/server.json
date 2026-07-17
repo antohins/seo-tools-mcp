@@ -1,11 +1,13 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.antohins/seo-tools-mcp-wordstat",
-  "description": "MCP server for Yandex Wordstat keyword frequencies (official API v2)",
+  "title": "SEO Tools: Yandex Wordstat",
+  "description": "MCP server for Yandex Wordstat keyword frequencies (official API v2). Free Yandex Cloud Search API.",
   "repository": {
     "url": "https://github.com/antohins/seo-tools-mcp",
     "source": "github"
   },
+  "websiteUrl": "https://github.com/antohins/seo-tools-mcp#readme",
   "version": "1.0.1",
   "packages": [
     {
@@ -14,7 +16,23 @@
       "version": "1.0.1",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "WORDSTAT_API_KEY",
+          "description": "Yandex Cloud API key with scope yc.search-api.execute.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "WORDSTAT_FOLDER_ID",
+          "description": "Yandex Cloud folder ID.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
     }
   ]
 }
