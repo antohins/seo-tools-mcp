@@ -22,6 +22,7 @@ import { collectRows } from './paginate.js';
 loadSharedEnv();
 
 const PAGE_SIZE = 25_000; // максимум GSC API за запрос
+const QUERY_DEADLINE_MS = 5 * 60_000; // общий потолок на всю пагинацию одного gsc_query
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const OAUTH_PORT = Number(process.env.GSC_OAUTH_PORT || 8585); // реальный env процесса — ок
 const REDIRECT_URI = `http://localhost:${OAUTH_PORT}`;
@@ -188,7 +189,7 @@ function queryAll(siteUrl: string, body: Record<string, unknown>, limit: number,
       attempts: 2, // длинный таймаут × 3 ретрая × 401-повтор × страницы иначе висит минутами
     }, account);
     return page.rows ?? [];
-  }, limit, PAGE_SIZE);
+  }, limit, PAGE_SIZE, QUERY_DEADLINE_MS);
 }
 
 const server = new McpServer({ name: 'gsc', version: '1.0.0' });

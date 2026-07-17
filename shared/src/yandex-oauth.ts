@@ -93,7 +93,8 @@ async function tryRefresh(account?: string): Promise<string | null> {
       client_secret: clientSecret,
     });
     const values: Record<string, string> = { [envKey('YANDEX_OAUTH_TOKEN', account)]: data.access_token };
-    if (data.refresh_token) values[envKey('YANDEX_REFRESH_TOKEN', account)] = data.refresh_token;
+    // refresh пишем только при фактической ротации — лишняя запись конфига дёргает файл зря
+    if (data.refresh_token && data.refresh_token !== refreshToken) values[envKey('YANDEX_REFRESH_TOKEN', account)] = data.refresh_token;
     if (data.expires_in) values[envKey('YANDEX_TOKEN_EXPIRES', account)] = new Date(Date.now() + data.expires_in * 1000).toISOString();
     saveEnvValues(values);
     console.error(`[yandex-oauth] токен${account ? ` аккаунта «${account}»` : ''} обновлён по refresh-токену`);
@@ -140,7 +141,20 @@ export async function yandexFetchJson<T = any>(
       );
     }
     const fresh = await tryRefresh(account);
-    if (fresh) return exec(fresh);
+    if (fresh) {
+      try {
+        return await exec(fresh);
+      } catch (err2) {
+        // Свежий токен снова 401 → доступ приложения, вероятно, отозван; не крутим бесконечно
+        if (err2 instanceof HttpError && err2.status === 401) {
+          throw new Error(
+            `OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} отклонён (401) даже после обновления по refresh — ` +
+            'вероятно, доступ приложения отозван. Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
+          );
+        }
+        throw err2;
+      }
+    }
     throw new Error(
       `OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} протух, а refresh-токена/клиента для обновления нет. ` +
       'Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
@@ -182,7 +196,7 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
       return jsonResult({
         ready: true,
         account: args.account ?? null,
-        authorizeUrl: `https://oauth.yandex.ru/authorize?response_type=code&client_id=${clientId}`,
+        authorizeUrl: `https://oauth.yandex.ru/authorize?response_type=code&client_id=${clientId}&force_confirm=yes`,
         next: `Пользователь открывает ссылку под ${args.account ? `Яндекс-аккаунтом профиля «${args.account}»` : 'аккаунтом-владельцем сайта/счётчика'}, ` +
           `разрешает доступ, копирует код подтверждения со страницы и передаёт его в ${prefix}_oauth_finish` +
           `${args.account ? ` вместе с account="${args.account}"` : ''}.`,

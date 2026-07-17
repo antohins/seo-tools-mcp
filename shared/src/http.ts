@@ -15,8 +15,10 @@ export interface FetchRetryOptions {
   timeoutMs?: number;
   /** число попыток всего (1 = без ретраев) */
   attempts?: number;
-  /** базовая задержка перед ретраем, мс (удваивается каждый раз) */
+  /** базовая задержка перед ретраем, мс (удваивается каждый раз + jitter) */
   backoffMs?: number;
+  /** какие HTTP-статусы ретраить (по умолчанию 429 и 5xx) */
+  retryOn?: (status: number) => boolean;
 }
 
 export class HttpError extends Error {
@@ -64,9 +66,16 @@ async function attemptOnce(url: string, init: Omit<FetchRetryOptions, 'timeoutMs
   }
 }
 
+/** Экспоненциальный backoff с полным jitter — рассинхронизирует всплеск параллельных ретраев. */
+function backoffWithJitter(base: number, attempt: number): number {
+  const exp = base * 2 ** (attempt - 1);
+  return Math.round(exp * (0.5 + Math.random() * 0.5));
+}
+
 /** GET/POST с ретраями; возвращает тело ответа строкой. */
 export async function fetchText(url: string, opts: FetchRetryOptions = {}): Promise<string> {
-  const { attempts = 3, backoffMs = 1000, timeoutMs = 60_000, ...init } = opts;
+  const { attempts = 3, backoffMs = 1000, timeoutMs = 60_000, retryOn, ...init } = opts;
+  const isRetriable = retryOn ?? ((status: number) => status === 429 || status >= 500);
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let res: AttemptResult;
@@ -77,17 +86,17 @@ export async function fetchText(url: string, opts: FetchRetryOptions = {}): Prom
       const isAbort = err instanceof Error && err.name === 'AbortError';
       const isNetwork = err instanceof TypeError; // fetch network failure
       if (!(isAbort || isNetwork) || attempt === attempts) throw err;
-      const delay = backoffMs * 2 ** (attempt - 1);
+      const delay = backoffWithJitter(backoffMs, attempt);
       console.error(`[http] ${isAbort ? 'timeout' : 'network error'} ${maskUrl(url)} — retry ${attempt}/${attempts - 1} in ${delay}ms`);
       await sleep(delay);
       continue;
     }
 
     if (res.ok) return res.text;
-    const retriable = res.status === 429 || res.status >= 500;
-    if (!retriable || attempt === attempts) throw new HttpError(res.status, url, res.text);
+    if (!isRetriable(res.status) || attempt === attempts) throw new HttpError(res.status, url, res.text);
 
-    const delay = res.retryAfterMs ?? backoffMs * 2 ** (attempt - 1);
+    // Retry-After (если сервер прислал) уважаем точно; иначе — jitter-backoff
+    const delay = res.retryAfterMs ?? backoffWithJitter(backoffMs, attempt);
     console.error(`[http] ${res.status} ${maskUrl(url)} — retry ${attempt}/${attempts - 1} in ${delay}ms`);
     await sleep(delay);
   }

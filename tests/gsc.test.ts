@@ -46,4 +46,16 @@ describe('collectRows (gsc пагинация + truncated)', () => {
     expect(r.rows).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(r.truncated).toBe(false);
   });
+
+  it('общий дедлайн обрывает пагинацию с truncated=true', async () => {
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+    // источник «бесконечный», каждая страница медленная — без дедлайна цикл шёл бы долго
+    const slow = async (rowLimit: number, startRow: number): Promise<number[]> => {
+      await sleep(20);
+      return Array.from({ length: rowLimit }, (_, i) => startRow + i); // всегда полная страница
+    };
+    const r = await collectRows(slow, 1_000_000, 5, 5); // deadlineMs=5 < время первой страницы (~20мс)
+    expect(r.truncated).toBe(true);
+    expect(r.rows.length).toBeLessThan(1_000_000); // оборвались рано
+  });
 });
