@@ -11,7 +11,7 @@ Five **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Go
 
 | Server | Tools | Auth |
 |---|---|---|
-| `xmlstock` | `xmlstock_serp`, `xmlstock_balance` | API key |
+| `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_search_queries`, `ywm_recommended_queries`, `ywm_popular` | OAuth (auto-refresh) |

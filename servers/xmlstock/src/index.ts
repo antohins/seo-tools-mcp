@@ -32,6 +32,7 @@ import {
 } from '@seo-tools/shared';
 import { z } from 'zod';
 import { parseDocs, type SerpDoc } from './parse.js';
+import { parseImages, parseNews, parseVideo } from './verticals.js';
 import { asArray, domainOf, parseXml, stripTags } from './xml.js';
 
 loadSharedEnv();
@@ -147,6 +148,36 @@ registerAuthTools(
   },
 );
 
+/** Число найденных из тела ответа (found может быть массивом/объектом с #text). */
+function extractFound(doc: any): number | null {
+  const f = doc?.yandexsearch?.response?.found;
+  const fv = Array.isArray(f) ? f[0] : f;
+  return Number(typeof fv === 'object' ? fv?.['#text'] : fv) || null;
+}
+
+/** Постраничный сбор Google-вертикали (images/news/video) до depth; нумерация сквозная. */
+async function collectVertical<T extends { position: number }>(
+  common: Record<string, string | number | undefined>,
+  depth: number,
+  parse: (doc: any) => T[],
+  account?: string,
+): Promise<{ results: T[]; found: number | null }> {
+  const maxPages = Math.ceil(depth / 10) + 1;
+  const results: T[] = [];
+  let found: number | null = null;
+  for (let page = 0; page < maxPages && results.length < depth; page++) {
+    const doc = await xmlstockGet(GOOGLE_URL, { ...common, page }, account);
+    if (page === 0) found = extractFound(doc);
+    const items = parse(doc);
+    if (!items.length) break;
+    for (const it of items) {
+      it.position = results.length + 1;
+      results.push(it);
+    }
+  }
+  return { results: results.slice(0, depth), found };
+}
+
 server.registerTool(
   'xmlstock_serp',
   {
@@ -174,6 +205,14 @@ server.registerTool(
       lang: z.string().optional().describe('Google hl (язык интерфейса), Yandex lang'),
       period: z.string().optional().describe('Google tbs (qdr:m, qdr:y...) / Yandex within (77=сутки, 1=2 недели, 2=месяц)'),
       exactQuery: z.boolean().default(false).describe('Не исправлять запрос (nfpr=1 / noreask=1)'),
+      safeSearch: z
+        .enum(['moderate', 'strict', 'off'])
+        .default('moderate')
+        .describe('Безопасный поиск: Google safe (moderate=размытие/strict=фильтр/off), Yandex filter (moderate/strict/none)'),
+      includeSimilar: z.boolean().default(false).describe('Google: показать скрытые похожие результаты (filter=1)'),
+      sortby: z.enum(['relevance', 'date']).default('relevance').describe('Yandex: сортировка выдачи (rlv / tm — по дате)'),
+      maxpassages: z.number().int().min(1).max(5).optional().describe('Yandex: сколько пассажей-сниппетов на документ (1–5)'),
+      l10n: z.string().optional().describe('Yandex: язык уведомлений (ru/uk/be/kk/tr/en)'),
       account: accountParam,
     },
   },
@@ -197,10 +236,18 @@ server.registerTool(
       if (args.lang) common.hl = args.lang;
       if (args.period) common.tbs = args.period;
       if (args.exactQuery) common.nfpr = 1;
+      if (args.safeSearch === 'strict') common.safe = 'on';
+      else if (args.safeSearch === 'off') common.safe = 'off';
+      if (args.includeSimilar) common.filter = 1;
     } else {
       if (args.lang) common.lang = args.lang;
       if (args.period) common.within = args.period;
       if (args.exactQuery) common.noreask = 1;
+      // Yandex family filter: moderate (дефолт) / strict / none
+      common.filter = args.safeSearch === 'off' ? 'none' : args.safeSearch;
+      if (args.sortby === 'date') common.sortby = 'tm';
+      if (args.maxpassages) common.maxpassages = args.maxpassages;
+      if (args.l10n) common.l10n = args.l10n;
     }
 
     let results: SerpDoc[] = [];
@@ -251,6 +298,81 @@ server.registerTool(
         packs: firstPagePacks,
       },
     });
+  }),
+);
+
+const verticalInput = {
+  query: z.string().min(1),
+  region: z.string().default('Москва').describe('«Москва»/«Россия»/213/225 — id Яндекса, XMLStock маппит на Google'),
+  depth: z.number().int().min(1).max(50).default(20).describe('Сколько результатов собрать (пагинация, каждая страница — платный запрос)'),
+  device: z.enum(['desktop', 'mobile']).default('desktop'),
+  searchDomain: z.string().optional().describe('Доменная зона Google (ru/com/de...), по умолчанию ru'),
+  safeSearch: z.enum(['moderate', 'strict', 'off']).default('moderate').describe('Безопасный поиск (safe: размытие/фильтр/выкл)'),
+  account: accountParam,
+};
+
+/** Общая часть параметров запроса для Google-вертикали. */
+function verticalCommon(args: {
+  query: string;
+  region: string;
+  device: string;
+  searchDomain?: string;
+  safeSearch: 'moderate' | 'strict' | 'off';
+}): Record<string, string | number | undefined> {
+  const common: Record<string, string | number | undefined> = {
+    query: args.query,
+    domain: args.searchDomain ?? 'ru',
+    device: args.device,
+  };
+  const lr = resolveRegionId(args.region);
+  if (lr !== undefined) common.lr = lr;
+  if (args.safeSearch === 'strict') common.safe = 'on';
+  else if (args.safeSearch === 'off') common.safe = 'off';
+  return common;
+}
+
+server.registerTool(
+  'xmlstock_images',
+  {
+    description:
+      'Поиск по картинкам Google через XMLStock (ПЛАТНО за запрос). ' +
+      'Возвращает { position, url (страница-источник), imageUrl (сама картинка), title }.',
+    inputSchema: verticalInput,
+  },
+  safeHandler(async (args) => {
+    const common = { ...verticalCommon(args), tbm: 'images' };
+    const { results, found } = await collectVertical(common, args.depth, parseImages, args.account);
+    return jsonResult({ query: args.query, tbm: 'images', region: args.region, found, count: results.length, results });
+  }),
+);
+
+server.registerTool(
+  'xmlstock_news',
+  {
+    description:
+      'Поиск по новостям Google через XMLStock (ПЛАТНО за запрос). ' +
+      'Возвращает { position, url, title, source (издание), date (часто относительная), snippet }.',
+    inputSchema: verticalInput,
+  },
+  safeHandler(async (args) => {
+    const common = { ...verticalCommon(args), tbm: 'news' };
+    const { results, found } = await collectVertical(common, args.depth, parseNews, args.account);
+    return jsonResult({ query: args.query, tbm: 'news', region: args.region, found, count: results.length, results });
+  }),
+);
+
+server.registerTool(
+  'xmlstock_video',
+  {
+    description:
+      'Поиск по видео Google через XMLStock (ПЛАТНО за запрос). ' +
+      'Возвращает { position, url, title, thumbnail, host (YouTube...), channel, duration, snippet }.',
+    inputSchema: verticalInput,
+  },
+  safeHandler(async (args) => {
+    const common = { ...verticalCommon(args), tbm: 'video' };
+    const { results, found } = await collectVertical(common, args.depth, parseVideo, args.account);
+    return jsonResult({ query: args.query, tbm: 'video', region: args.region, found, count: results.length, results });
   }),
 );
 

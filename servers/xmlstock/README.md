@@ -13,8 +13,11 @@ Then set credentials right in the chat: `xmlstock_auth_status` → `xmlstock_set
 
 ## Tools
 
-- `xmlstock_serp`
-- `xmlstock_balance`
+- `xmlstock_serp` — Google/Yandex web SERP (organic + highlights + SERP features), region, device, safe search, sort (Yandex), time period, ad blocks
+- `xmlstock_images` — Google image search (page url + image url + title)
+- `xmlstock_news` — Google news (title, source, date, snippet)
+- `xmlstock_video` — Google video (url, title, thumbnail, host, channel, duration)
+- `xmlstock_balance` — account balance / key check (free)
 
 ---
 

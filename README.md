@@ -11,7 +11,7 @@
 
 | Сервер | Рабочие инструменты | Авторизация |
 |---|---|---|
-| `xmlstock` | `xmlstock_serp`, `xmlstock_balance` | API-ключ |
+| `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_search_queries`, `ywm_recommended_queries`, `ywm_popular` | OAuth (авто-refresh) |
