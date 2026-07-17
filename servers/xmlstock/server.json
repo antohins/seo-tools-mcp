@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.antohins/seo-tools-mcp-xmlstock",
+  "description": "MCP server for Google & Yandex SERP via XMLStock",
+  "repository": {
+    "url": "https://github.com/antohins/seo-tools-mcp",
+    "source": "github"
+  },
+  "version": "1.0.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "seo-tools-mcp-xmlstock",
+      "version": "1.0.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

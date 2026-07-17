@@ -1,6 +1,7 @@
 {
   "name": "seo-tools-mcp-ywm",
-  "version": "1.0.0",
+  "mcpName": "io.github.antohins/seo-tools-mcp-ywm",
+  "version": "1.0.1",
   "description": "MCP server for Yandex.Webmaster search queries (read-only)",
   "license": "MIT",
   "author": "antohins",

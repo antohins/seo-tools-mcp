@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-07-17
+
+### Added
+- Listed on the official [MCP Registry](https://registry.modelcontextprotocol.io) under
+  `io.github.antohins/seo-tools-mcp-*`: added the `mcpName` field to each package and a
+  per-server `server.json`.
+
 ## [1.0.0] — 2026-07-17
 
 First public release. Each server is published to npm as `seo-tools-mcp-<server>` and
@@ -36,5 +43,6 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/antohins/seo-tools-mcp/releases/tag/v1.0.0
