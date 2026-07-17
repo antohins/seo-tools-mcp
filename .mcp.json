@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "xmlstock": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-xmlstock"]
+    },
+    "wordstat": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-wordstat"]
+    },
+    "gsc": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-gsc"]
+    },
+    "ywm": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-ywm"]
+    },
+    "metrika": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-metrika"]
+    }
+  }
+}
