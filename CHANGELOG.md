@@ -6,32 +6,35 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-### Added
-- npm packaging: each server ships as a self-contained package `seo-tools-mcp-<server>`
-  with a `bin`, installable via `npx -y seo-tools-mcp-<server>` (shared bundled in via tsup).
-- Unit tests (vitest) covering secret masking, OAuth error classification, Metrica/GSC
-  pagination (dedup, `truncated`), filters, the SERP parser and regions; opt-in live smoke.
-- GitHub Actions CI (build + typecheck + test) and status badge.
-- English README (`README.en.md`) with a language switcher.
-- Configurable `retryOn(status)` in the HTTP client.
+## [1.0.0] — 2026-07-17
 
-### Changed
-- HTTP retry backoff now uses full jitter to de-synchronise parallel retries.
-- Yandex OAuth: refresh token is rewritten only when it actually rotates; a second 401
-  right after refresh becomes an explicit "re-authorize" terminal error; `force_confirm`
-  is only forced for named multi-account profiles.
-- GSC: a whole-pagination deadline guards against compounding timeouts on slow endpoints.
-- Yandex region directory expanded (~10 → ~55 entries) with aliases; all ids verified
-  against the Wordstat region tree; any numeric id still works.
-
-## [1.0.0] — Initial public release
+First public release. Each server is published to npm as `seo-tools-mcp-<server>` and
+installable via `npx -y seo-tools-mcp-<server>`.
 
 ### Added
-- Five read-only stdio MCP servers for SEO: `xmlstock` (Google/Yandex SERP), `wordstat`,
-  `gsc` (Google Search Console), `ywm` (Yandex.Webmaster), `metrika` (Yandex.Metrica).
+- Five read-only stdio MCP servers for SEO: `xmlstock` (Google/Yandex SERP), `wordstat`
+  (Yandex keyword frequencies), `gsc` (Google Search Console), `ywm` (Yandex.Webmaster),
+  `metrika` (Yandex.Metrica).
 - Single env-file config (`~/.config/seo-tools-mcp/.env`, mode 600), multi-account named
   profiles, interactive OAuth (Google, Yandex) with automatic token refresh, strict JSON output.
-- Shared HTTP client with retries (429/5xx, Retry-After), secret masking in logs.
+- Shared HTTP client with retries (429/5xx, Retry-After, exponential backoff + jitter) and a
+  configurable `retryOn(status)`; secrets masked in logs (`maskUrl`, `maskSecret`).
+- npm packaging: self-contained bundles per server (shared bundled in via tsup, `bin` entry).
+- Unit tests (vitest) — secret masking, OAuth error classification, Metrica/GSC pagination
+  (dedup, `truncated`), filters, SERP parser, regions — plus an opt-in live smoke.
+- GitHub Actions CI (lint + build + typecheck + test), Biome linter/formatter, README in
+  Russian and English.
+
+### Reliability
+- Yandex OAuth: refresh token rewritten only on actual rotation; a second 401 right after
+  refresh becomes an explicit "re-authorize" terminal error; `force_confirm` only for named
+  multi-account profiles; transient (5xx/timeout) refresh failures are not mistaken for a dead grant.
+- GSC: whole-pagination deadline guards against compounding timeouts on slow endpoints;
+  accurate `truncated` flag; 120s per-request timeout.
+- Metrica: pagination advances by rows actually read (no lost rows on short pages), with
+  dedup and a no-progress break.
+- Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
+  any numeric id works.
 
 [Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/antohins/seo-tools-mcp/releases/tag/v1.0.0
