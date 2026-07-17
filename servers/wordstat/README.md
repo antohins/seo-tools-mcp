@@ -13,10 +13,10 @@ Then set credentials right in the chat: `wordstat_auth_status` → `wordstat_set
 
 ## Tools
 
-- `wordstat_frequency`
-- `wordstat_dynamics`
-- `wordstat_regions`
-- `wordstat_regions_tree`
+- `wordstat_frequency` — broad + exact frequency, refining queries (related) and associations
+- `wordstat_dynamics` — frequency over time (daily/weekly/monthly)
+- `wordstat_regions` — regional distribution with affinity index and resolved region names
+- `wordstat_regions_tree` — full Wordstat region tree (id + name)
 
 ---
 

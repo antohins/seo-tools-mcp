@@ -23,6 +23,7 @@ import {
   safeHandler,
 } from '@seo-tools/shared';
 import { z } from 'zod';
+import { flattenRegions, type RegionNode } from './regions.js';
 
 loadSharedEnv();
 
@@ -64,6 +65,19 @@ const toNum = (v: unknown): number => {
   const n = Number(v); // count/totalCount приходят строками (proto int64)
   return Number.isFinite(n) ? n : 0;
 };
+
+// Справочник id→название регионов: дерево большое и меняется редко — кешируем на сутки per-профиль.
+const REGION_NAMES_TTL_MS = 24 * 60 * 60_000;
+const regionNamesCache = new Map<string, { ts: number; names: Map<string, string> }>();
+async function regionNames(account?: string): Promise<Map<string, string>> {
+  const key = account ?? '';
+  const hit = regionNamesCache.get(key);
+  if (hit && Date.now() - hit.ts < REGION_NAMES_TTL_MS) return hit.names;
+  const tree = await wordstatPost<{ regions?: RegionNode[] }>('getRegionsTree', {}, account);
+  const names = flattenRegions(tree.regions);
+  regionNamesCache.set(key, { ts: Date.now(), names });
+  return names;
+}
 
 /**
  * true, если во фразе уже есть операторы Вордстата — тогда точную форму не строим сами.
@@ -201,8 +215,8 @@ server.registerTool(
   'wordstat_regions',
   {
     description:
-      'Распределение частотности фразы по регионам за 30 дней: { results: [{ region_id, count, share, affinityIndex }] }. ' +
-      'affinityIndex > 100 — интерес выше среднего по стране. regionType: cities | regions | all.',
+      'Распределение частотности фразы по регионам за 30 дней: { results: [{ region_id, region_name, count, share, affinityIndex }] }. ' +
+      'affinityIndex > 100 — интерес выше среднего по стране. regionType: cities | regions | all. Имена регионов резолвятся из дерева (кеш).',
     inputSchema: {
       query: z.string().min(1).max(400),
       regionType: z.enum(['cities', 'regions', 'all']).default('regions'),
@@ -219,13 +233,22 @@ server.registerTool(
     };
     if (devices) body.devices = devices;
 
-    const data = await wordstatPost<{ results?: Array<{ region: string; count: string; share: number; affinityIndex: number }> }>(
-      'regions',
-      body,
-      args.account,
-    );
+    const [data, names] = await Promise.all([
+      wordstatPost<{ results?: Array<{ region: string; count: string; share: number; affinityIndex: number }> }>(
+        'regions',
+        body,
+        args.account,
+      ),
+      regionNames(args.account).catch(() => new Map<string, string>()), // имена — «best effort»: их отсутствие не рушит частотность
+    ]);
     const results = (data.results ?? [])
-      .map((r) => ({ region_id: r.region, count: toNum(r.count), share: r.share ?? null, affinityIndex: r.affinityIndex ?? null }))
+      .map((r) => ({
+        region_id: r.region,
+        region_name: names.get(String(r.region)) ?? null,
+        count: toNum(r.count),
+        share: r.share ?? null,
+        affinityIndex: r.affinityIndex ?? null,
+      }))
       .sort((a, b) => b.count - a.count)
       .slice(0, args.limit);
     return jsonResult({ query: args.query, regionType: args.regionType, results });
