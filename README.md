@@ -17,21 +17,30 @@
 
 ## Быстрый старт
 
+### Вариант А — через npx (без клонирования)
+
+Каждый сервер — самодостаточный npm-пакет `seo-tools-mcp-<сервер>`; ставится одной командой:
+
+```bash
+claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
+claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
+claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
+claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
+claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
+```
+
+### Вариант Б — из исходников
+
 ```bash
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
-```
-
-Зарегистрировать серверы в Claude Code (подробнее — [ниже](#регистрация-в-claude-code)):
-
-```bash
 ROOT=$(pwd)
 for s in xmlstock wordstat gsc ywm metrika; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```
 
-Дальше — **прямо в диалоге Claude Code**: «настрой доступ к xmlstock» → агент вызовет `xmlstock_auth_status`, подскажет, какие ключи нужны и где их взять, примет их через `xmlstock_set_credentials` и сохранит. После этого спрашивайте данные обычным языком: «сними топ-10 Яндекса по запросу X», «частотность фраз …», «клики/показы из GSC за месяц». Ключи и OAuth настраиваются один раз (см. [Получение доступов](#получение-доступов-по-сервису)).
+Дальше (любой вариант) — **прямо в диалоге Claude Code**: «настрой доступ к xmlstock» → агент вызовет `xmlstock_auth_status`, подскажет, какие ключи нужны и где их взять, примет их через `xmlstock_set_credentials` и сохранит. После этого спрашивайте данные обычным языком: «сними топ-10 Яндекса по запросу X», «частотность фраз …», «клики/показы из GSC за месяц». Ключи и OAuth настраиваются один раз (см. [Получение доступов](#получение-доступов-по-сервису)).
 
 ## Интерактивная авторизация (в любой сессии)
 
@@ -210,6 +219,20 @@ node servers/xmlstock/dist/index.js   # ручной запуск (stdio)
 Юнит-тесты покрывают чистую логику: маскирование секретов, классификацию OAuth-ошибок, пагинацию Метрики/GSC (дедуп, `truncated`), фильтры, парсер SERP, регионы. Лайв-смоук поднимает каждый сервер и дёргает бесплатный инструмент (`xmlstock_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`) — проверка авторизации end-to-end.
 
 Общий код (`shared/`): HTTP-клиент с ретраями на 429/5xx (3 попытки, экспоненциальный backoff, Retry-After), загрузчик env + персистентный конфиг, фабрика auth-инструментов, Яндекс-OAuth с авто-refresh, JSON-хелперы MCP, счётчик расхода платных вызовов. XMLStock дополнительно ретраит свои «временные» коды из тела XML, код 15 («ничего не найдено») трактуется как пустая выдача.
+
+Сборка серверов — `tsup`: `shared/` вбивается в единый `dist/index.js` каждого сервера (рантайм-зависимости остаются external), поэтому npm-пакет самодостаточен.
+
+## Публикация в npm (мейнтейнерам)
+
+Каждый сервер публикуется как отдельный пакет `seo-tools-mcp-<сервер>`; `shared/` приватный и в npm не уходит (вбит в серверы). Версии всех серверов держим синхронно.
+
+```bash
+npm login
+pnpm -r build                 # shared (tsc) → серверы (tsup-бандл)
+pnpm -r publish --access public   # публикует 5 серверов; private-пакеты (shared, корень) пропускаются
+```
+
+`pnpm publish` сам подставляет реальные версии вместо `workspace:*` и не даст опубликовать при грязном рабочем дереве. Бамп версии — `pnpm -r exec npm version patch` (или вручную в каждом `package.json`).
 
 ## Лицензия
 

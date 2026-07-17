@@ -1,21 +1,50 @@
 {
-  "name": "@seo-tools/metrika",
+  "name": "seo-tools-mcp-metrika",
   "version": "1.0.0",
-  "private": true,
+  "description": "MCP server for Yandex.Metrica Stat API (read-only)",
+  "license": "MIT",
+  "author": "antohins",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antohins/seo-tools-mcp.git",
+    "directory": "servers/metrika"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp#readme",
+  "bugs": "https://github.com/antohins/seo-tools-mcp/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "seo",
+    "yandex",
+    "yandex-metrica",
+    "metrika",
+    "analytics"
+  ],
   "type": "module",
   "bin": {
-    "metrika-mcp": "dist/index.js"
+    "seo-tools-mcp-metrika": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@seo-tools/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@seo-tools/shared": "workspace:*",
+    "tsup": "^8.5.1",
     "typescript": "^5.6.0",
     "@types/node": "^22.0.0"
   }

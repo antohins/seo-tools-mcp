@@ -19,21 +19,30 @@ Five **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Go
 
 ## Quick start
 
+### Option A — via npx (no cloning)
+
+Each server is a self-contained npm package `seo-tools-mcp-<server>`; add it with one command:
+
+```bash
+claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
+claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
+claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
+claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
+claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
+```
+
+### Option B — from source
+
 ```bash
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
-```
-
-Register the servers in Claude Code (details [below](#registering-in-claude-code)):
-
-```bash
 ROOT=$(pwd)
 for s in xmlstock wordstat gsc ywm metrika; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```
 
-Then, **right in the Claude Code chat**: "set up access to xmlstock" → the agent calls `xmlstock_auth_status`, tells you which keys are needed and where to get them, accepts them via `xmlstock_set_credentials` and saves them. After that, just ask in plain language: "pull top-10 Yandex results for query X", "keyword frequency for …", "clicks/impressions from GSC for the month". Keys and OAuth are set up once (see [Getting access](#getting-access-per-service)).
+Then (either option), **right in the Claude Code chat**: "set up access to xmlstock" → the agent calls `xmlstock_auth_status`, tells you which keys are needed and where to get them, accepts them via `xmlstock_set_credentials` and saves them. After that, just ask in plain language: "pull top-10 Yandex results for query X", "keyword frequency for …", "clicks/impressions from GSC for the month". Keys and OAuth are set up once (see [Getting access](#getting-access-per-service)).
 
 ## Interactive authorization (any session)
 
@@ -212,6 +221,20 @@ node servers/xmlstock/dist/index.js   # manual run (stdio)
 Unit tests cover pure logic: secret masking, OAuth error classification, Metrica/GSC pagination (dedup, `truncated`), filters, the SERP parser, regions. The live smoke boots each server and calls a free tool (`xmlstock_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`) — an end-to-end auth check.
 
 Shared code (`shared/`): an HTTP client with retries on 429/5xx (3 attempts, exponential backoff, Retry-After), an env loader + persistent config, an auth-tools factory, Yandex OAuth with auto-refresh, MCP JSON helpers, a paid-call cost counter. XMLStock additionally retries its own "temporary" codes from the XML body; code 15 ("nothing found") is treated as an empty SERP.
+
+Servers are built with `tsup`: `shared/` is bundled into each server's single `dist/index.js` (runtime deps stay external), so each npm package is self-contained.
+
+## Publishing to npm (maintainers)
+
+Each server is published as a separate package `seo-tools-mcp-<server>`; `shared/` is private and not published (it's bundled into the servers). Keep all server versions in sync.
+
+```bash
+npm login
+pnpm -r build                 # shared (tsc) → servers (tsup bundle)
+pnpm -r publish --access public   # publishes the 5 servers; private packages (shared, root) are skipped
+```
+
+`pnpm publish` substitutes real versions for `workspace:*` and refuses to publish from a dirty tree. Bump versions with `pnpm -r exec npm version patch` (or by hand in each `package.json`).
 
 ## License
 
