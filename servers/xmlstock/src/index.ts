@@ -30,10 +30,9 @@ import {
   safeHandler,
   sleep,
 } from '@seo-tools/shared';
+import { asArray, domainOf, parseDocs, parseXml, type SerpDoc, stripTags } from '@seo-tools/shared/serp';
 import { z } from 'zod';
-import { parseDocs, type SerpDoc } from './parse.js';
 import { parseImages, parseNews, parseVideo } from './verticals.js';
-import { asArray, domainOf, parseXml, stripTags } from './xml.js';
 
 loadSharedEnv();
 

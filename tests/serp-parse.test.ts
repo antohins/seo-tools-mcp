@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDocs } from '../servers/xmlstock/src/parse.js';
+import { parseDocs } from '../shared/src/serp/parse.js';
 
 /** Собирает структуру ответа XMLStock из массива doc-ов одной группы. */
 function docWith(docs: any[]) {

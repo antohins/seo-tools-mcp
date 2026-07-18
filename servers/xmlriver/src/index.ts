@@ -29,15 +29,14 @@ import {
   safeHandler,
   sleep,
 } from '@seo-tools/shared';
+import { parseDocs, parseXml, type SerpDoc, stripTags } from '@seo-tools/shared/serp';
 import { z } from 'zod';
-import { parseDocs, type SerpDoc } from './parse.js';
 import { parseImages, parseNews } from './verticals.js';
-import { parseXml, stripTags } from './xml.js';
 
 loadSharedEnv();
 
-const GOOGLE_URL = 'http://xmlriver.com/search/xml';
-const YANDEX_URL = 'http://xmlriver.com/search_yandex/xml';
+const GOOGLE_URL = 'https://xmlriver.com/search/xml';
+const YANDEX_URL = 'https://xmlriver.com/search_yandex/xml';
 const BALANCE_URL = 'https://xmlriver.com/api/get_balance/';
 
 const cost = new CostLogger('xmlriver', () => Number(getConfig('XMLRIVER_PRICE_PER_CALL') || 0.02));
@@ -165,7 +164,10 @@ server.registerTool(
       query: z.string().min(1),
       engine: z.enum(['google', 'yandex']).default('google'),
       device: z.enum(['desktop', 'mobile']).default('desktop'),
-      region: z.string().default('Москва').describe('«Москва»/«Россия»/213/225 — id региона Яндекса (маппится и на Google)'),
+      region: z
+        .string()
+        .default('Москва')
+        .describe('«Москва»/«Россия»/213/225 — id региона Яндекса (lr). Надёжно влияет на engine=yandex; органика Google гео-инвариантна.'),
       depth: z.number().int().min(1).max(100).default(10).describe('Сколько органических позиций собрать (одним запросом, groupby)'),
       excludeAggregators: z.boolean().default(false).describe('Исключить домены-агрегаторы (список — XMLRIVER_EXCLUDE_DOMAINS)'),
       includeAds: z.boolean().default(false).describe('Добавить рекламные блоки (ads=1)'),
@@ -284,26 +286,24 @@ server.registerTool(
   'xmlriver_check_index',
   {
     description:
-      'Проверка индексации URL в Google/Yandex через XMLRiver (ПЛАТНО за запрос). ' +
+      'Проверка индексации URL в Google через XMLRiver (ПЛАТНО за запрос). ' +
       'Ищет точный URL в выдаче по нему же (inindex). Возвращает { url, indexed, matchedUrl, found }. ' +
-      'strict=true — учитывать регистр URL.',
+      'strict=true — учитывать регистр URL. (Яндекс через inindex не поддерживается — только Google.)',
     inputSchema: {
       url: z.string().url().describe('Полный URL для проверки индексации'),
-      engine: z.enum(['google', 'yandex']).default('google'),
       strict: z.boolean().default(false).describe('Строгое соответствие регистра URL'),
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
-    const base = args.engine === 'yandex' ? YANDEX_URL : GOOGLE_URL;
-    const doc = await xmlriverGet(base, { query: args.url, inindex: 1, strict: args.strict ? 1 : 0 }, args.account);
+    const doc = await xmlriverGet(GOOGLE_URL, { query: args.url, inindex: 1, strict: args.strict ? 1 : 0 }, args.account);
     const { docs } = parseDocs(doc);
     const norm = (u: string) => (args.strict ? u : u.toLowerCase()).replace(/\/+$/, '');
     const target = norm(args.url);
     const matched = docs.find((d) => norm(d.url) === target);
     return jsonResult({
       url: args.url,
-      engine: args.engine,
+      engine: 'google',
       indexed: Boolean(matched),
       matchedUrl: matched?.url ?? null,
       found: extractFound(doc),
@@ -321,7 +321,10 @@ server.registerTool(
     const user = requireEnv('XMLRIVER_USER', args.account);
     const key = requireEnv('XMLRIVER_KEY', args.account);
     const url = `${BALANCE_URL}?user=${encodeURIComponent(user)}&key=${encodeURIComponent(key)}`;
-    const text = (await fetchText(url, { timeoutMs: 30_000 })).trim();
+    const raw = await fetchText(url, { timeoutMs: 30_000 });
+    // терпим BOM/пробелы и десятичную запятую; НЕ вычищаем символы агрессивно,
+    // чтобы HTML-страница ошибки честно превратилась в NaN, а не в мусорное число
+    const text = raw.replace(/^﻿/, '').trim().replace(',', '.');
     const balance = Number(text);
     if (!Number.isFinite(balance)) {
       throw new Error(

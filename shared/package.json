@@ -6,7 +6,14 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./serp": {
+      "types": "./dist/serp/index.d.ts",
+      "default": "./dist/serp/index.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -14,7 +21,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "fast-xml-parser": "^4.5.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

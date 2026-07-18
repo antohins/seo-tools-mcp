@@ -173,6 +173,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.0
         version: 1.29.0(zod@3.25.76)
+      fast-xml-parser:
+        specifier: ^4.5.0
+        version: 4.5.7
       zod:
         specifier: ^3.24.0
         version: 3.25.76

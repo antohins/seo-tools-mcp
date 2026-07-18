@@ -1,20 +1,5 @@
 /** Разбор вертикалей Google (images/news/video) XMLStock — структуры сверены на живых ответах. */
-import { asArray, stripTags } from './xml.js';
-
-function docsOf(doc: any): any[] {
-  const out: any[] = [];
-  for (const g of asArray(doc?.yandexsearch?.response?.results?.grouping?.group)) {
-    for (const d of asArray<any>(g?.doc)) out.push(d);
-  }
-  return out;
-}
-
-const passages = (d: any): string =>
-  stripTags(
-    asArray<any>(d?.passages?.passage)
-      .map((p) => String(p ?? ''))
-      .join(' … '),
-  );
+import { docsOf, passages, stripTags } from '@seo-tools/shared/serp';
 
 export interface ImageResult {
   position: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asArray, domainOf, extractBolds, parseXml, stripTags } from '../servers/xmlstock/src/xml.js';
+import { asArray, domainOf, extractBolds, parseXml, stripTags } from '../shared/src/serp/xml.js';
 
 describe('domainOf', () => {
   it('вырезает www', () => {
