@@ -26,6 +26,6 @@ Then set credentials right in the chat: `metrika_auth_status` → `metrika_set_c
 
 ---
 
-🛰 Maintained by [**Satellite1**](https://satellite1.ru/) — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. We use these tools in production. Need steady organic traffic? [Get in touch](https://satellite1.ru/).
+🛰 Maintained by [**Satellite1**](https://pbn-workers.com/tools/seo-tools-mcp/) — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. We use these tools in production. Need steady organic traffic? [Get in touch](https://pbn-workers.com/tools/seo-tools-mcp/).
 
 MIT © antohins

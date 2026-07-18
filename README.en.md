@@ -11,7 +11,7 @@
 
 Six **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Yandex.Webmaster and Yandex.Metrica straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, Webmaster host, Metrica counter) are configured on the fly.
 
-> 🛰 We use these servers in production at **[Satellite1](https://satellite1.ru/)** — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. Need steady organic traffic? [Get in touch](https://satellite1.ru/).
+> 🛰 We use these servers in production at **[Satellite1](https://pbn-workers.com/tools/seo-tools-mcp/)** — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. Need steady organic traffic? [Get in touch](https://pbn-workers.com/tools/seo-tools-mcp/).
 
 | Server | Tools | Auth |
 |---|---|---|
