@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-128.png" width="96" height="96" alt="seo-tools-mcp" />
+</p>
+
 # seo-tools-mcp
 
 [![CI](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml)

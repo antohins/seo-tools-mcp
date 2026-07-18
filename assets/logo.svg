@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Satellite1 brand: ink #0F172A tile, white glyph, signal-green #10B981 accent -->
+  <rect x="0" y="0" width="512" height="512" rx="115" fill="#0F172A"/>
+
+  <!-- signal / satellite dot (top-right), echoes satellite1 favicon -->
+  <circle cx="398" cy="126" r="34" fill="#10B981"/>
+
+  <!-- magnifier: SEO lens -->
+  <!-- handle -->
+  <line x1="311" y1="311" x2="388" y2="388" stroke="#FFFFFF" stroke-width="36" stroke-linecap="round"/>
+  <!-- lens -->
+  <circle cx="238" cy="240" r="100" fill="#1E293B" stroke="#FFFFFF" stroke-width="24"/>
+
+  <!-- growth bars inside lens (tallest = signal green) -->
+  <rect x="196" y="248" width="21" height="44" rx="5.5" fill="#FFFFFF"/>
+  <rect x="227" y="216" width="21" height="76" rx="5.5" fill="#FFFFFF"/>
+  <rect x="258" y="186" width="21" height="106" rx="5.5" fill="#10B981"/>
+</svg>
