@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **New server `xmlriver`** — Google/Yandex SERP via [XMLRiver](https://xmlriver.com), a second
+  SERP provider alongside XMLStock. Tools: `xmlriver_serp` (organic, depth in one request via
+  `groupby`, AI-Overview presence flag), `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`
+  (URL indexation check — unique to XMLRiver), `xmlriver_balance`. Verified against the live API.
+
 ## [1.1.0] — 2026-07-17
 
 Major read-only tool expansion across all servers (~14 → ~38 tools), verified against live APIs.

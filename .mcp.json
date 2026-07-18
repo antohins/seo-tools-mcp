@@ -4,6 +4,10 @@
       "command": "npx",
       "args": ["-y", "seo-tools-mcp-xmlstock"]
     },
+    "xmlriver": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-xmlriver"]
+    },
     "wordstat": {
       "command": "npx",
       "args": ["-y", "seo-tools-mcp-wordstat"]

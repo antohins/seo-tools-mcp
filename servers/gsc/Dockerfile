@@ -9,6 +9,7 @@ RUN npm install -g pnpm@10.33.2
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY shared/package.json shared/package.json
 COPY servers/xmlstock/package.json servers/xmlstock/package.json
+COPY servers/xmlriver/package.json servers/xmlriver/package.json
 COPY servers/wordstat/package.json servers/wordstat/package.json
 COPY servers/gsc/package.json servers/gsc/package.json
 COPY servers/ywm/package.json servers/ywm/package.json

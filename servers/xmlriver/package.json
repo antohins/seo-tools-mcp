@@ -1,0 +1,55 @@
+{
+  "name": "seo-tools-mcp-xmlriver",
+  "mcpName": "io.github.antohins/seo-tools-mcp-xmlriver",
+  "version": "1.1.0",
+  "description": "MCP server for Google & Yandex SERP, image/news verticals and URL indexation checks via XMLRiver",
+  "license": "MIT",
+  "author": "antohins",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antohins/seo-tools-mcp.git",
+    "directory": "servers/xmlriver"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp#readme",
+  "bugs": "https://github.com/antohins/seo-tools-mcp/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "seo",
+    "serp",
+    "xmlriver",
+    "google",
+    "yandex",
+    "rank-tracking",
+    "indexation"
+  ],
+  "type": "module",
+  "bin": {
+    "seo-tools-mcp-xmlriver": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0",
+    "fast-xml-parser": "^4.5.0"
+  },
+  "devDependencies": {
+    "@seo-tools/shared": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

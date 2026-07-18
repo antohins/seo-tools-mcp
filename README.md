@@ -9,13 +9,14 @@
 
 **Русский** | [English](README.en.md)
 
-Пять **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру и Яндекс.Метрике прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
+Шесть **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру и Яндекс.Метрике прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
 
 > 🛰 Эти серверы мы используем в продакшене в **[Satellite1](https://satellite1.ru/)** — инфраструктура поискового топа: семантика, PBN и сателлиты, автоматизация SEO. Нужен стабильный органический трафик — [приходите](https://satellite1.ru/).
 
 | Сервер | Рабочие инструменты | Авторизация |
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_balance` | API-ключ |
+| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
@@ -31,6 +32,13 @@
 - `xmlstock_news` — новости Google (заголовок, источник, дата, сниппет)
 - `xmlstock_video` — видео Google (url, заголовок, превью, хост, канал, длительность)
 - `xmlstock_balance` — баланс аккаунта / проверка ключа (бесплатно)
+
+### xmlriver — SERP Google/Яндекс + проверка индексации
+- `xmlriver_serp` — органика Google/Яндекса, глубина одним запросом (groupby до 100), флаг наличия AI Overview
+- `xmlriver_images` — картинки Google (страница + url картинки + заголовок + источник + размеры)
+- `xmlriver_news` — новости Google (заголовок, источник, дата, сниппет), фильтр по времени
+- `xmlriver_check_index` — проверка индексации URL в Google/Яндексе (`inindex`)
+- `xmlriver_balance` — баланс аккаунта / проверка ключа (бесплатно)
 
 ### wordstat — частотности Яндекса
 - `wordstat_frequency` — широкая и точная частотность, уточняющие запросы (related) и ассоциации
@@ -81,6 +89,7 @@
 
 ```bash
 claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
+claude mcp add xmlriver --scope user -- npx -y seo-tools-mcp-xmlriver
 claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
 claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
 claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
@@ -93,7 +102,7 @@ claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
 ROOT=$(pwd)
-for s in xmlstock wordstat gsc ywm metrika; do
+for s in xmlstock xmlriver wordstat gsc ywm metrika; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```

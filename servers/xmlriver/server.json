@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.antohins/seo-tools-mcp-xmlriver",
+  "title": "SEO Tools: XMLRiver SERP (Google + Yandex)",
+  "description": "MCP server for Google & Yandex SERP, image/news verticals and URL indexation checks via XMLRiver (read-only).",
+  "repository": {
+    "url": "https://github.com/antohins/seo-tools-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/antohins/seo-tools-mcp#readme",
+  "version": "1.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "seo-tools-mcp-xmlriver",
+      "version": "1.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "XMLRIVER_USER",
+          "description": "XMLRiver user ID (from the xmlriver.com dashboard).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "XMLRIVER_KEY",
+          "description": "XMLRiver API key.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

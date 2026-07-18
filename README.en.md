@@ -9,13 +9,14 @@
 
 [Русский](README.md) | **English**
 
-Five **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Yandex.Webmaster and Yandex.Metrica straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, Webmaster host, Metrica counter) are configured on the fly.
+Six **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Yandex.Webmaster and Yandex.Metrica straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, Webmaster host, Metrica counter) are configured on the fly.
 
 > 🛰 We use these servers in production at **[Satellite1](https://satellite1.ru/)** — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. Need steady organic traffic? [Get in touch](https://satellite1.ru/).
 
 | Server | Tools | Auth |
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_balance` | API key |
+| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
@@ -33,6 +34,13 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `xmlstock_news` — Google news (title, source, date, snippet)
 - `xmlstock_video` — Google video (url, title, thumbnail, host, channel, duration)
 - `xmlstock_balance` — account balance / key check (free)
+
+### xmlriver — Google/Yandex SERP + indexation check
+- `xmlriver_serp` — Google/Yandex organic SERP, depth in one request (groupby up to 100), AI-Overview presence flag
+- `xmlriver_images` — Google image search (page url + image url + title + source + dimensions)
+- `xmlriver_news` — Google news (title, source, date, snippet), time filter
+- `xmlriver_check_index` — check whether a URL is indexed in Google/Yandex (`inindex`)
+- `xmlriver_balance` — account balance / key check (free)
 
 ### wordstat — Yandex keyword frequencies
 - `wordstat_frequency` — broad + exact frequency, refining queries (related) and associations
@@ -83,6 +91,7 @@ Each server is a self-contained npm package `seo-tools-mcp-<server>`; add it wit
 
 ```bash
 claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
+claude mcp add xmlriver --scope user -- npx -y seo-tools-mcp-xmlriver
 claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
 claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
 claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
@@ -95,7 +104,7 @@ claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
 ROOT=$(pwd)
-for s in xmlstock wordstat gsc ywm metrika; do
+for s in xmlstock xmlriver wordstat gsc ywm metrika; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```

@@ -15,15 +15,15 @@ COPY servers/gsc/package.json servers/gsc/package.json
 COPY servers/ywm/package.json servers/ywm/package.json
 COPY servers/metrika/package.json servers/metrika/package.json
 # Install only this server and its workspace deps (not the whole monorepo).
-RUN pnpm install --frozen-lockfile --filter "seo-tools-mcp-metrika..."
+RUN pnpm install --frozen-lockfile --filter "seo-tools-mcp-xmlriver..."
 COPY . .
-RUN pnpm --filter "seo-tools-mcp-metrika..." build
-RUN pnpm --filter "seo-tools-mcp-metrika" --prod --legacy deploy /out
+RUN pnpm --filter "seo-tools-mcp-xmlriver..." build
+RUN pnpm --filter "seo-tools-mcp-xmlriver" --prod --legacy deploy /out
 
 # Minimal runtime: tini as PID 1 (proper signal handling), non-root, prod deps only.
 FROM node:22-alpine AS runtime
-LABEL org.opencontainers.image.title="seo-tools-mcp-metrika" \
-      org.opencontainers.image.description="MCP server for Yandex.Metrica Stat API: reports, traffic, geo, devices, goals (read-only)" \
+LABEL org.opencontainers.image.title="seo-tools-mcp-xmlriver" \
+      org.opencontainers.image.description="MCP server for Google & Yandex SERP, verticals and indexation checks via XMLRiver (read-only)" \
       org.opencontainers.image.source="https://github.com/antohins/seo-tools-mcp" \
       org.opencontainers.image.licenses="MIT"
 RUN apk add --no-cache tini
