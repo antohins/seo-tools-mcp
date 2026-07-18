@@ -6,11 +6,20 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-18
+
 ### Added
 - **New server `xmlriver`** — Google/Yandex SERP via [XMLRiver](https://xmlriver.com), a second
   SERP provider alongside XMLStock. Tools: `xmlriver_serp` (organic, depth in one request via
   `groupby`, AI-Overview presence flag), `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`
-  (URL indexation check — unique to XMLRiver), `xmlriver_balance`. Verified against the live API.
+  (URL indexation check — Google, unique to XMLRiver), `xmlriver_balance`. All requests over HTTPS.
+  Verified end-to-end against the live API.
+- The shared Yandex.XML SERP parser now lives in `@seo-tools/shared/serp` and is used by both
+  XMLStock and XMLRiver (kept out of non-SERP server bundles).
+
+### Changed
+- Docker images: build one server's dependencies only (filtered install), `tini` as PID 1,
+  manifest-first layer caching.
 
 ## [1.1.0] — 2026-07-17
 
@@ -76,7 +85,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.0...v1.0.1

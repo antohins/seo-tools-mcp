@@ -1,7 +1,7 @@
 {
   "name": "seo-tools-mcp-xmlriver",
   "mcpName": "io.github.antohins/seo-tools-mcp-xmlriver",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP server for Google & Yandex SERP, image/news verticals and URL indexation checks via XMLRiver",
   "license": "MIT",
   "author": "antohins",
