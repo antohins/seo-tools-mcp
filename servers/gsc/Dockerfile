@@ -5,21 +5,31 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 RUN npm install -g pnpm@10.33.2
+# Copy manifests first so the dependency layer is cached across source-only edits.
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY shared/package.json shared/package.json
+COPY servers/xmlstock/package.json servers/xmlstock/package.json
+COPY servers/wordstat/package.json servers/wordstat/package.json
+COPY servers/gsc/package.json servers/gsc/package.json
+COPY servers/ywm/package.json servers/ywm/package.json
+COPY servers/metrika/package.json servers/metrika/package.json
+# Install only this server and its workspace deps (not the whole monorepo).
+RUN pnpm install --frozen-lockfile --filter "seo-tools-mcp-gsc..."
 COPY . .
-RUN pnpm install --frozen-lockfile
 RUN pnpm --filter "seo-tools-mcp-gsc..." build
 RUN pnpm --filter "seo-tools-mcp-gsc" --prod --legacy deploy /out
 
-# Minimal runtime: non-root, production deps only.
+# Minimal runtime: tini as PID 1 (proper signal handling), non-root, prod deps only.
 FROM node:22-alpine AS runtime
 LABEL org.opencontainers.image.title="seo-tools-mcp-gsc" \
       org.opencontainers.image.description="MCP server for Google Search Console: Search Analytics, URL Inspection, sitemaps (read-only)" \
       org.opencontainers.image.source="https://github.com/antohins/seo-tools-mcp" \
       org.opencontainers.image.licenses="MIT"
+RUN apk add --no-cache tini
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /out/node_modules ./node_modules
 COPY --from=build /out/dist ./dist
 COPY --from=build /out/package.json ./
 USER node
-ENTRYPOINT ["node", "dist/index.js"]
+ENTRYPOINT ["/sbin/tini", "--", "node", "dist/index.js"]
