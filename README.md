@@ -17,6 +17,58 @@
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (авто-refresh) |
 
+У каждого сервера дополнительно есть auth-инструменты `<server>_auth_status` и `<server>_set_credentials` (см. [Интерактивная авторизация](#интерактивная-авторизация-в-любой-сессии)).
+
+## Инструменты по сервисам
+
+### xmlstock — SERP Google/Яндекс
+- `xmlstock_serp` — веб-выдача Google/Яндекса (органика + подсветки + SERP-фичи): регион, устройство, safe search, сортировка (Яндекс), период, рекламные блоки
+- `xmlstock_images` — поиск картинок Google (url страницы + url изображения + заголовок)
+- `xmlstock_news` — новости Google (заголовок, источник, дата, сниппет)
+- `xmlstock_video` — видео Google (url, заголовок, превью, хост, канал, длительность)
+- `xmlstock_balance` — баланс аккаунта / проверка ключа (бесплатно)
+
+### wordstat — частотности Яндекса
+- `wordstat_frequency` — широкая и точная частотность, уточняющие запросы (related) и ассоциации
+- `wordstat_dynamics` — частотность по времени (день/неделя/месяц)
+- `wordstat_regions` — распределение по регионам с индексом аффинити и именами регионов
+- `wordstat_regions_tree` — полное дерево регионов Вордстата (id + имя)
+
+### gsc — Google Search Console
+- `gsc_query` — Search Analytics (клики/показы/CTR/позиция), авто-пагинация, `dataState` final/all
+- `gsc_inspect_url` — URL Inspection: статус индексации, покрытие, canonical, последний обход, mobile usability, rich results
+- `gsc_list_sites` — свойства, доступные авторизации
+- `gsc_get_site` — уровень доступа к свойству
+- `gsc_list_sitemaps` — отправленные sitemap со статусом
+- `gsc_get_sitemap` — детали одного sitemap
+
+### ywm — Яндекс.Вебмастер
+- `ywm_hosts` — id пользователя + подтверждённые сайты
+- `ywm_summary` — ИКС, страниц в поиске, исключено, проблемы сайта по важности
+- `ywm_search_queries` — аналитика запросов по URL (~2 недели)
+- `ywm_queries_history` — суммарные показы/клики/позиции по времени
+- `ywm_recommended_queries` — приближённые рекомендованные запросы (спрос + недобор кликов)
+- `ywm_popular` — популярные запросы хоста
+- `ywm_indexing_history` — страниц в поиске по времени
+- `ywm_sqi_history` — ИКС по времени
+- `ywm_external_links` — выборка внешних ссылок + общее число
+- `ywm_broken_links` — битые внутренние/внешние ссылки
+- `ywm_diagnostics` — проблемы сайта
+- `ywm_important_urls` — отслеживаемые URL со статусом индексации/поиска
+- `ywm_sitemaps` — sitemap со статусом
+
+### metrika — Яндекс.Метрика
+- `metrika_report` — произвольный отчёт: любые dimensions × metrics, фильтры, сортировка (полный Stat API)
+- `metrika_bytime` — метрики по времени (день/неделя/месяц/час)
+- `metrika_traffic_sources` — визиты/пользователи/отказы по источникам трафика
+- `metrika_geo` — визиты по стране/региону/городу
+- `metrika_devices` — визиты по устройству/ОС/браузеру
+- `metrika_goals` — список целей (конверсий)
+- `metrika_counters` — доступные счётчики
+- `metrika_landing_behavior` — поведение на посадочных + достижения целей
+- `metrika_search_phrases` — поисковые фразы (органика)
+- `metrika_top_landings` — топ органических посадочных
+
 ## Быстрый старт
 
 ### Вариант А — через npx (без клонирования)

@@ -19,6 +19,58 @@ Five **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Go
 
 > **Regional focus:** XMLStock covers both Google and Yandex SERP, while Wordstat, Webmaster and Metrica are Yandex services — this toolkit is most useful for SEO on the Russian/CIS market (though GSC and the Google side of XMLStock are global).
 
+Every server additionally exposes auth tools `<server>_auth_status` and `<server>_set_credentials` (see [Interactive authorization](#interactive-authorization-any-session)).
+
+## Tools by server
+
+### xmlstock — Google/Yandex SERP
+- `xmlstock_serp` — Google/Yandex web SERP (organic + highlights + SERP features): region, device, safe search, sort (Yandex), time period, ad blocks
+- `xmlstock_images` — Google image search (page url + image url + title)
+- `xmlstock_news` — Google news (title, source, date, snippet)
+- `xmlstock_video` — Google video (url, title, thumbnail, host, channel, duration)
+- `xmlstock_balance` — account balance / key check (free)
+
+### wordstat — Yandex keyword frequencies
+- `wordstat_frequency` — broad + exact frequency, refining queries (related) and associations
+- `wordstat_dynamics` — frequency over time (daily/weekly/monthly)
+- `wordstat_regions` — regional distribution with affinity index and resolved region names
+- `wordstat_regions_tree` — full Wordstat region tree (id + name)
+
+### gsc — Google Search Console
+- `gsc_query` — Search Analytics (clicks/impressions/CTR/position), auto-pagination, `dataState` final/all
+- `gsc_inspect_url` — URL Inspection: index status, coverage, canonical, last crawl, mobile usability, rich results
+- `gsc_list_sites` — properties available to the authorization
+- `gsc_get_site` — permission level for a property
+- `gsc_list_sitemaps` — submitted sitemaps with status
+- `gsc_get_sitemap` — details for one sitemap
+
+### ywm — Yandex.Webmaster
+- `ywm_hosts` — user id + verified sites
+- `ywm_summary` — SQI, pages in search, excluded, site problems by severity
+- `ywm_search_queries` — query analytics for a URL (~2 weeks)
+- `ywm_queries_history` — total shows/clicks/positions over time
+- `ywm_recommended_queries` — approximated recommended queries (demand + click shortfall)
+- `ywm_popular` — popular queries of the host
+- `ywm_indexing_history` — pages in search over time
+- `ywm_sqi_history` — SQI over time
+- `ywm_external_links` — external backlinks sample + total count
+- `ywm_broken_links` — broken internal/external links
+- `ywm_diagnostics` — site problems
+- `ywm_important_urls` — monitored URLs with indexing/search status
+- `ywm_sitemaps` — sitemaps with status
+
+### metrika — Yandex.Metrica
+- `metrika_report` — arbitrary report: any dimensions × metrics, filters, sort (full Stat API)
+- `metrika_bytime` — metrics over time (day/week/month/hour)
+- `metrika_traffic_sources` — visits/users/bounce by traffic source
+- `metrika_geo` — visits by country/region/city
+- `metrika_devices` — visits by device/OS/browser
+- `metrika_goals` — list of conversion goals
+- `metrika_counters` — accessible counters
+- `metrika_landing_behavior` — landing-page behavior + goal reaches
+- `metrika_search_phrases` — organic search phrases
+- `metrika_top_landings` — top organic landing pages
+
 ## Quick start
 
 ### Option A — via npx (no cloning)
