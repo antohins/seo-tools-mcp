@@ -8,6 +8,16 @@ updates:
     groups:
       npm-dependencies:
         patterns: ["*"]
+    # Мажорные обновления этих пакетов ломают сборку и требуют ручной миграции:
+    # typescript 7 (нативный порт, не резолвит node-типы), zod 4 (несовместим с
+    # текущим MCP SDK), @types/node привязан к рантайму Node 22. Минор/патч разрешены.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "zod"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
