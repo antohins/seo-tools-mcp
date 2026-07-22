@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-22
+
+### Changed
+- Promo/branding in all READMEs renamed **Satellite1 → PBN Workers** (site
+  [pbn-workers.com](https://pbn-workers.com/tools/seo-tools-mcp/)). Docs only, no code changes.
+
 ## [1.2.0] — 2026-07-18
 
 ### Added
@@ -85,7 +91,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.1...v1.0.2
