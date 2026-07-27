@@ -15,7 +15,7 @@
 
 | Сервер | Рабочие инструменты | Авторизация |
 |---|---|---|
-| `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_balance` | API-ключ |
+| `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_wordstat`, `xmlstock_wordstat_dynamics`, `xmlstock_wordstat_regions`, `xmlstock_wordstat_regions_tree`, `xmlstock_balance` | API-ключ |
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
@@ -31,7 +31,13 @@
 - `xmlstock_images` — поиск картинок Google (url страницы + url изображения + заголовок)
 - `xmlstock_news` — новости Google (заголовок, источник, дата, сниппет)
 - `xmlstock_video` — видео Google (url, заголовок, превью, хост, канал, длительность)
+- `xmlstock_wordstat` — Яндекс Wordstat: топ + похожие запросы с частотностью (можно по региону), операторы Wordstat
+- `xmlstock_wordstat_dynamics` — динамика частотности по времени (день/неделя/месяц)
+- `xmlstock_wordstat_regions` — спрос по регионам (count, share, affinity index + имена регионов)
+- `xmlstock_wordstat_regions_tree` — дерево регионов Wordstat (id + имя + путь)
 - `xmlstock_balance` — баланс аккаунта / проверка ключа (бесплатно)
+
+> Wordstat через XMLStock — тем же ключом `XMLSTOCK_*`, что и SERP; **не нужен Yandex Cloud** (в отличие от отдельного сервера `wordstat`).
 
 ### xmlriver — SERP Google/Яндекс + проверка индексации
 - `xmlriver_serp` — органика Google/Яндекса, глубина одним запросом (groupby до 100), флаг наличия AI Overview

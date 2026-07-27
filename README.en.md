@@ -15,7 +15,7 @@ Six **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Goo
 
 | Server | Tools | Auth |
 |---|---|---|
-| `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_balance` | API key |
+| `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_wordstat`, `xmlstock_wordstat_dynamics`, `xmlstock_wordstat_regions`, `xmlstock_wordstat_regions_tree`, `xmlstock_balance` | API key |
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
@@ -33,7 +33,13 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `xmlstock_images` — Google image search (page url + image url + title)
 - `xmlstock_news` — Google news (title, source, date, snippet)
 - `xmlstock_video` — Google video (url, title, thumbnail, host, channel, duration)
+- `xmlstock_wordstat` — Yandex Wordstat: top + related queries with frequency (region-scoped), Wordstat operators
+- `xmlstock_wordstat_dynamics` — frequency over time (day/week/month)
+- `xmlstock_wordstat_regions` — demand by region (count, share, affinity index + region names)
+- `xmlstock_wordstat_regions_tree` — Wordstat region tree (id + name + path)
 - `xmlstock_balance` — account balance / key check (free)
+
+> Wordstat via XMLStock uses the same `XMLSTOCK_*` key as SERP — **no Yandex Cloud setup** needed (unlike the standalone `wordstat` server).
 
 ### xmlriver — Google/Yandex SERP + indexation check
 - `xmlriver_serp` — Google/Yandex organic SERP, depth in one request (groupby up to 100), AI-Overview presence flag

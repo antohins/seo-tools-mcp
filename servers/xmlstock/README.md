@@ -1,6 +1,6 @@
 # seo-tools-mcp-xmlstock
 
-MCP server for **Google & Yandex SERP via XMLStock** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (five SEO servers).
+MCP server for **Google & Yandex SERP + Yandex Wordstat via XMLStock** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (SEO servers for the Google/Yandex market).
 
 ## Install
 
@@ -17,7 +17,13 @@ Then set credentials right in the chat: `xmlstock_auth_status` → `xmlstock_set
 - `xmlstock_images` — Google image search (page url + image url + title)
 - `xmlstock_news` — Google news (title, source, date, snippet)
 - `xmlstock_video` — Google video (url, title, thumbnail, host, channel, duration)
+- `xmlstock_wordstat` — Yandex Wordstat: top + related queries with frequency (region-scoped)
+- `xmlstock_wordstat_dynamics` — Wordstat frequency over time (day/week/month)
+- `xmlstock_wordstat_regions` — Wordstat demand by region (count, share, affinity index + region names)
+- `xmlstock_wordstat_regions_tree` — Wordstat region tree (id + name + path)
 - `xmlstock_balance` — account balance / key check (free)
+
+> Wordstat via XMLStock uses the same `XMLSTOCK_*` key as SERP — no separate Yandex Cloud setup needed (unlike the standalone `wordstat` server).
 
 ---
 

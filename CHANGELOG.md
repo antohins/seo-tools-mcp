@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **XMLStock server: Yandex Wordstat** (endpoint `/wordstat/json/`, official Wordstat API v2) —
+  new tools `xmlstock_wordstat` (top + related queries with frequency, region-scoped, Wordstat
+  operators), `xmlstock_wordstat_dynamics` (frequency over time), `xmlstock_wordstat_regions`
+  (demand by region + affinity index, region names resolved), `xmlstock_wordstat_regions_tree`.
+  Uses the same `XMLSTOCK_*` key as SERP — no separate Yandex Cloud setup. Verified against the live API.
+
 ## [1.2.1] — 2026-07-22
 
 ### Changed

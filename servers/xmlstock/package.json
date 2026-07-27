@@ -2,7 +2,7 @@
   "name": "seo-tools-mcp-xmlstock",
   "mcpName": "io.github.antohins/seo-tools-mcp-xmlstock",
   "version": "1.2.1",
-  "description": "MCP server for Google & Yandex SERP via XMLStock",
+  "description": "MCP server for Google & Yandex SERP + Yandex Wordstat via XMLStock",
   "license": "MIT",
   "author": "antohins",
   "repository": {
@@ -21,7 +21,8 @@
     "xmlstock",
     "google",
     "yandex",
-    "rank-tracking"
+    "rank-tracking",
+    "wordstat"
   ],
   "type": "module",
   "bin": {

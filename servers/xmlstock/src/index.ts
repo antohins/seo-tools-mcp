@@ -11,7 +11,8 @@
  * lr принимает id регионов Яндекса и для Google (авто-маппинг на стороне XMLStock);
  * ошибки приходят HTTP 200 с XML <error code>: 20-25/101/110/111/500 ретраить, 55 rate-limit,
  * 15 = пустая выдача (деньги списаны), 31/42 — фатальные (авторизация), 200 — фатальная.
- * Wordstat у XMLStock НЕТ — частотности идут через отдельный сервер wordstat.
+ * Wordstat у XMLStock ЕСТЬ (эндпоинт /wordstat/json/, официальный Wordstat API v2): tools
+ * xmlstock_wordstat / _dynamics / _regions / _regions_tree — тем же ключом XMLSTOCK, без Yandex Cloud.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -33,6 +34,7 @@ import {
 import { asArray, domainOf, parseDocs, parseXml, type SerpDoc, stripTags } from '@seo-tools/shared/serp';
 import { z } from 'zod';
 import { parseImages, parseNews, parseVideo } from './verticals.js';
+import { flattenRegionsTree, parseHistory, parseRegions, parseWords, regionNameMap } from './wordstat.js';
 
 loadSharedEnv();
 
@@ -407,6 +409,149 @@ server.registerTool(
       throw new Error('XMLStock вернул пустой ответ — вероятно неверные XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials).');
     }
     return jsonResult(data);
+  }),
+);
+
+// ── XMLStock Wordstat API (эндпоинт /wordstat/json/, JSON; тот же ключ XMLSTOCK, что и для SERP) ──
+
+const WORDSTAT_URL = 'https://xmlstock.com/wordstat/json/';
+
+/** GET к Wordstat XMLStock: JSON; ошибки приходят как { error: { code, message } }. */
+async function wordstatGet(pagetype: string, params: Record<string, string | number | undefined>, account?: string): Promise<any> {
+  const user = requireEnv('XMLSTOCK_USER', account);
+  const key = requireEnv('XMLSTOCK_KEY', account);
+  const qs = new URLSearchParams({ user, key, pagetype });
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') qs.set(k, String(v));
+  }
+  const text = await fetchText(`${WORDSTAT_URL}?${qs}`, { timeoutMs: 60_000 });
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(
+      'XMLStock Wordstat вернул не JSON — вероятно неверные XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials / xmlstock_auth_status).',
+    );
+  }
+  const err = json?.error;
+  if (err) {
+    const code = Number(err?.code ?? 0);
+    const message = String(err?.message ?? '');
+    if (code === 100 || code === 200 || /key|user|auth|ключ|доступ|access/i.test(message)) {
+      throw new Error(`XMLStock Wordstat error ${code}: ${message}. Проверьте XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials).`);
+    }
+    throw new Error(`XMLStock Wordstat error ${code}: ${message}`);
+  }
+  cost.track('wordstat');
+  return json;
+}
+
+// Кэш дерева регионов (id→имя) на аккаунт, TTL 24ч — обогащаем ответ regions именами.
+const wsRegionsCache = new Map<string, { names: Map<string, string>; ts: number }>();
+async function wsRegionNames(account?: string): Promise<Map<string, string>> {
+  const acc = account || '';
+  const cached = wsRegionsCache.get(acc);
+  if (cached && Date.now() - cached.ts < 24 * 60 * 60 * 1000) return cached.names;
+  const names = regionNameMap(await wordstatGet('regionsTree', {}, account));
+  wsRegionsCache.set(acc, { names, ts: Date.now() });
+  return names;
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+/** YYYY-MM-DD → DD.MM.YYYY. Для period=month снапаем start→01, end→последний день месяца (иначе XMLStock code 7). */
+function wsDate(iso: string, opts?: { startOfMonth?: boolean; endOfMonth?: boolean }): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso; // не наш формат — отдадим как есть, XMLStock сам отвалидирует
+  const [, y, mo] = m;
+  let d = m[3];
+  if (opts?.startOfMonth) d = '01';
+  if (opts?.endOfMonth) d = pad2(new Date(Number(y), Number(mo), 0).getDate());
+  return `${d}.${mo}.${y}`;
+}
+
+const wsRegionParam = z.string().optional().describe('Регион: «Москва»/«спб»/213 — id/название Яндекса; без него — вся Россия');
+
+server.registerTool(
+  'xmlstock_wordstat',
+  {
+    description:
+      'Частотность и топ запросов Яндекс Wordstat через XMLStock (ПЛАТНО за запрос, ~19₽/1K). ' +
+      'Возвращает { totalCount, results: [{ phrase, count }] (топ по фразе), associations: [{ phrase, count }] (похожие) }. ' +
+      'Операторы Wordstat в query: "…" (точная), ! (форма слова), + (стоп-слово), - (минус), [ ] (порядок), | (или).',
+    inputSchema: {
+      query: z.string().min(1),
+      region: wsRegionParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const params: Record<string, string | number | undefined> = { query: args.query };
+    if (args.region) {
+      const id = resolveRegionId(args.region);
+      if (id !== undefined) params.regions = id;
+    }
+    const json = await wordstatGet('words', params, args.account);
+    return jsonResult({ query: args.query, region: args.region ?? 'Россия', ...parseWords(json) });
+  }),
+);
+
+server.registerTool(
+  'xmlstock_wordstat_dynamics',
+  {
+    description:
+      'Динамика частотности фразы по времени (Яндекс Wordstat через XMLStock, ПЛАТНО за запрос). ' +
+      'period: day/week/month. from/to — YYYY-MM-DD (для month период автоматически растягивается на целые месяцы). ' +
+      'Возвращает [{ date, count, share }].',
+    inputSchema: {
+      query: z.string().min(1),
+      period: z.enum(['day', 'week', 'month']).default('month'),
+      from: z.string().describe('Начало периода, YYYY-MM-DD'),
+      to: z.string().describe('Конец периода, YYYY-MM-DD'),
+      region: wsRegionParam,
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const month = args.period === 'month';
+    const params: Record<string, string | number | undefined> = {
+      query: args.query,
+      period: args.period,
+      start: wsDate(args.from, { startOfMonth: month }),
+      end: wsDate(args.to, { endOfMonth: month }),
+    };
+    if (args.region) {
+      const id = resolveRegionId(args.region);
+      if (id !== undefined) params.regions = id;
+    }
+    const json = await wordstatGet('history', params, args.account);
+    return jsonResult({ query: args.query, period: args.period, results: parseHistory(json) });
+  }),
+);
+
+server.registerTool(
+  'xmlstock_wordstat_regions',
+  {
+    description:
+      'Распределение спроса по регионам для фразы (Яндекс Wordstat через XMLStock, ПЛАТНО — дороже топа/динамики). ' +
+      'Возвращает [{ regionId, name, count, share, affinityIndex }]; имена регионов подставляются из дерева (кэш 24ч).',
+    inputSchema: { query: z.string().min(1), account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const [json, names] = await Promise.all([wordstatGet('regions', { query: args.query }, args.account), wsRegionNames(args.account)]);
+    return jsonResult({ query: args.query, results: parseRegions(json, names) });
+  }),
+);
+
+server.registerTool(
+  'xmlstock_wordstat_regions_tree',
+  {
+    description:
+      'Дерево регионов Яндекс Wordstat через XMLStock (id + имя + путь) — id для параметра region в других запросах. ПЛАТНО за запрос.',
+    inputSchema: { account: accountParam },
+  },
+  safeHandler(async (args) => {
+    const json = await wordstatGet('regionsTree', {}, args.account);
+    return jsonResult({ regions: flattenRegionsTree(json) });
   }),
 );
 
