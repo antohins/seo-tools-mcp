@@ -104,6 +104,43 @@ claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
 claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 ```
 
+#### Need just one server?
+
+The servers are **independent**: take a single package and ignore the rest. Each is self-contained — the shared `@seo-tools/shared` code is bundled into the build, so there's no extra dependency or monorepo tail. Just install the package you need from npm — everything is included out of the box (`npx -y` downloads and runs it for you):
+
+| Package (npm) | Server |
+|---|---|
+| [`seo-tools-mcp-xmlstock`](https://www.npmjs.com/package/seo-tools-mcp-xmlstock) | Google/Yandex SERP + Wordstat |
+| [`seo-tools-mcp-xmlriver`](https://www.npmjs.com/package/seo-tools-mcp-xmlriver) | Google/Yandex SERP + indexation check |
+| [`seo-tools-mcp-wordstat`](https://www.npmjs.com/package/seo-tools-mcp-wordstat) | Yandex keyword frequencies (Yandex Cloud) |
+| [`seo-tools-mcp-gsc`](https://www.npmjs.com/package/seo-tools-mcp-gsc) | Google Search Console |
+| [`seo-tools-mcp-ywm`](https://www.npmjs.com/package/seo-tools-mcp-ywm) | Yandex.Webmaster |
+| [`seo-tools-mcp-metrika`](https://www.npmjs.com/package/seo-tools-mcp-metrika) | Yandex.Metrica |
+
+```bash
+# add a single server to Claude Code
+claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
+
+# or run it directly (keys via env)
+XMLSTOCK_USER=... XMLSTOCK_KEY=... npx -y seo-tools-mcp-xmlstock
+```
+
+In any MCP client (Claude Desktop, Cursor…) it's a single block in `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "xmlstock": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-xmlstock"],
+      "env": { "XMLSTOCK_USER": "...", "XMLSTOCK_KEY": "..." }
+    }
+  }
+}
+```
+
+> Installing a single package straight from the GitHub URL (`npm i github:antohins/seo-tools-mcp`) is **not supported**: it's a pnpm monorepo, so an individual subpackage can't be installed that way. To install from source, use Option B below (clone + build). The ready-to-use packages live on npm.
+
 ### Option B — from source
 
 ```bash

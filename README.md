@@ -102,6 +102,43 @@ claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
 claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 ```
 
+#### Нужен только один сервер?
+
+Серверы **не связаны** между собой: возьмите один пакет и игнорируйте остальные. Каждый самодостаточен — общий код `@seo-tools/shared` вшит в сборку, так что лишних зависимостей и «хвоста» монорепы не тянется. Достаточно установить нужный пакет с npm — там уже всё из коробки (`npx -y` скачает и запустит его сам):
+
+| Пакет (npm) | Сервер |
+|---|---|
+| [`seo-tools-mcp-xmlstock`](https://www.npmjs.com/package/seo-tools-mcp-xmlstock) | SERP Google/Яндекс + Wordstat |
+| [`seo-tools-mcp-xmlriver`](https://www.npmjs.com/package/seo-tools-mcp-xmlriver) | SERP Google/Яндекс + проверка индексации |
+| [`seo-tools-mcp-wordstat`](https://www.npmjs.com/package/seo-tools-mcp-wordstat) | частотности Яндекса (Yandex Cloud) |
+| [`seo-tools-mcp-gsc`](https://www.npmjs.com/package/seo-tools-mcp-gsc) | Google Search Console |
+| [`seo-tools-mcp-ywm`](https://www.npmjs.com/package/seo-tools-mcp-ywm) | Яндекс.Вебмастер |
+| [`seo-tools-mcp-metrika`](https://www.npmjs.com/package/seo-tools-mcp-metrika) | Яндекс.Метрика |
+
+```bash
+# добавить один сервер в Claude Code
+claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
+
+# или запустить напрямую (ключи через env)
+XMLSTOCK_USER=... XMLSTOCK_KEY=... npx -y seo-tools-mcp-xmlstock
+```
+
+В любом MCP-клиенте (Claude Desktop, Cursor…) — прописывается один блок в `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "xmlstock": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-xmlstock"],
+      "env": { "XMLSTOCK_USER": "...", "XMLSTOCK_KEY": "..." }
+    }
+  }
+}
+```
+
+> Прямая установка одного пакета по GitHub-ссылке (`npm i github:antohins/seo-tools-mcp`) **не поддерживается**: это pnpm-монорепа, отдельный подпакет так не ставится. Для установки из исходников — вариант Б ниже (клонировать + собрать). Готовые пакеты живут на npm.
+
 ### Вариант Б — из исходников
 
 ```bash
