@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-26
+
 ### Added
 - **XMLStock server: Yandex Wordstat** (endpoint `/wordstat/json/`, official Wordstat API v2) —
   new tools `xmlstock_wordstat` (top + related queries with frequency, region-scoped, Wordstat
@@ -98,7 +100,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.0.2...v1.1.0

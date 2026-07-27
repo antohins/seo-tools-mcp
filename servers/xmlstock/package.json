@@ -1,7 +1,7 @@
 {
   "name": "seo-tools-mcp-xmlstock",
   "mcpName": "io.github.antohins/seo-tools-mcp-xmlstock",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "MCP server for Google & Yandex SERP + Yandex Wordstat via XMLStock",
   "license": "MIT",
   "author": "antohins",
