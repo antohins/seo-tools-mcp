@@ -1,6 +1,6 @@
 # seo-tools-mcp-metrika
 
-MCP server for **Yandex.Metrica Stat API (read-only)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (five SEO servers).
+MCP server for **Yandex.Metrica Stat API (read-only)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (six SEO servers).
 
 ## Install
 
@@ -8,7 +8,20 @@ MCP server for **Yandex.Metrica Stat API (read-only)** — for [Claude Code](htt
 claude mcp add metrika --scope user -- npx -y seo-tools-mcp-metrika
 ```
 
-Then set credentials right in the chat: `metrika_auth_status` → `metrika_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all five servers, multi-account and configuration:
+Self-contained package — the shared code is bundled in, nothing else to install. For any other MCP client (Claude Desktop, Cursor…), add one block to `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "metrika": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-metrika"]
+    }
+  }
+}
+```
+
+Yandex.Metrica uses Yandex OAuth — no env needed to start; authorize right in the chat via `metrika_auth_status` → `metrika_oauth_start` / `metrika_oauth_finish` (token auto-refreshes). Full docs, all six servers, multi-account and configuration:
 **https://github.com/antohins/seo-tools-mcp**
 
 ## Tools

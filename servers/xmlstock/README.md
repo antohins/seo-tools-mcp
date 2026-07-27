@@ -8,7 +8,21 @@ MCP server for **Google & Yandex SERP + Yandex Wordstat via XMLStock** — for [
 claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
 ```
 
-Then set credentials right in the chat: `xmlstock_auth_status` → `xmlstock_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all five servers, multi-account and configuration:
+Self-contained package — the shared code is bundled in, nothing else to install. For any other MCP client (Claude Desktop, Cursor…), add one block to `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "xmlstock": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-xmlstock"],
+      "env": { "XMLSTOCK_USER": "...", "XMLSTOCK_KEY": "..." }
+    }
+  }
+}
+```
+
+Then set credentials right in the chat: `xmlstock_auth_status` → `xmlstock_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all six servers, multi-account and configuration:
 **https://github.com/antohins/seo-tools-mcp**
 
 ## Tools

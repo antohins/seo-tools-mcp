@@ -1,6 +1,6 @@
 # seo-tools-mcp-ywm
 
-MCP server for **Yandex.Webmaster search queries (read-only)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (five SEO servers).
+MCP server for **Yandex.Webmaster search queries (read-only)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (six SEO servers).
 
 ## Install
 
@@ -8,7 +8,20 @@ MCP server for **Yandex.Webmaster search queries (read-only)** — for [Claude C
 claude mcp add ywm --scope user -- npx -y seo-tools-mcp-ywm
 ```
 
-Then set credentials right in the chat: `ywm_auth_status` → `ywm_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all five servers, multi-account and configuration:
+Self-contained package — the shared code is bundled in, nothing else to install. For any other MCP client (Claude Desktop, Cursor…), add one block to `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "ywm": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-ywm"]
+    }
+  }
+}
+```
+
+Yandex.Webmaster uses Yandex OAuth — no env needed to start; authorize right in the chat via `ywm_auth_status` → `ywm_oauth_start` / `ywm_oauth_finish` (token auto-refreshes). Full docs, all six servers, multi-account and configuration:
 **https://github.com/antohins/seo-tools-mcp**
 
 ## Tools

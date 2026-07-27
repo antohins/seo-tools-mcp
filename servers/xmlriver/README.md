@@ -8,6 +8,20 @@ MCP server for **Google & Yandex SERP via XMLRiver (read-only)** — for [Claude
 claude mcp add xmlriver --scope user -- npx -y seo-tools-mcp-xmlriver
 ```
 
+Self-contained package — the shared code is bundled in, nothing else to install. For any other MCP client (Claude Desktop, Cursor…), add one block to `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "xmlriver": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-xmlriver"],
+      "env": { "XMLRIVER_USER": "...", "XMLRIVER_KEY": "..." }
+    }
+  }
+}
+```
+
 Then set credentials right in the chat: `xmlriver_auth_status` → `xmlriver_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all servers and configuration:
 **https://github.com/antohins/seo-tools-mcp**
 
