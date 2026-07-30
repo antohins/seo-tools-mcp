@@ -106,17 +106,12 @@ describe('firstResult / allResults', () => {
 });
 
 describe('parseSuggest', () => {
-  it('реальная форма SE::*::Suggest: results[].suggest', () => {
-    expect(
-      parseSuggest({
-        results: [
-          { suggest: 'iphone 15', type: 0 },
-          { suggest: 'iphone 15 pro', type: 0 },
-        ],
-      }),
-    ).toEqual(['iphone 15', 'iphone 15 pro']);
+  it('реальная форма SE::*::Suggest: плоский results [suggest,type,…]', () => {
+    // как на живом инстансе: ['кофемашина', 1, 'кофе', 1, …]
+    expect(parseSuggest({ results: ['кофемашина', 1, 'кофе', 1, 'кофе купить', 1] })).toEqual(['кофемашина', 'кофе', 'кофе купить']);
   });
-  it('терпит альтернативные формы suggest[]/serp[]', () => {
+  it('терпит объектную и альтернативные формы (suggest[]/serp[])', () => {
+    expect(parseSuggest({ results: [{ suggest: 'a' }, { suggest: 'b' }] })).toEqual(['a', 'b']);
     expect(parseSuggest({ suggest: ['a', 'b'] })).toEqual(['a', 'b']);
     expect(parseSuggest({ serp: [{ anchor: 'купить' }] })).toEqual(['купить']);
   });

@@ -119,7 +119,11 @@ export function allResults(data: any): any[] {
   return data && Array.isArray(data.results) ? data.results : [];
 }
 
-/** Подсказки из suggest-парсера (SE::*::Suggest → results[].suggest); терпит и suggest[]/serp[]. */
+/**
+ * Подсказки из suggest-парсера. В rawResults SE::*::Suggest отдаёт results ПЛОСКИМ
+ * массивом [suggest, type, suggest, type, …] — оставляем строки, числа-типы отсеиваем.
+ * Терпит и объектные/альтернативные формы (suggest[]/serp[]) на случай других парсеров.
+ */
 export function parseSuggest(result: any): string[] {
   const r = result || {};
   const raw = Array.isArray(r.results)
