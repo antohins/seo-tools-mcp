@@ -110,10 +110,23 @@ describe('parseSuggest', () => {
     // как на живом инстансе: ['кофемашина', 1, 'кофе', 1, …]
     expect(parseSuggest({ results: ['кофемашина', 1, 'кофе', 1, 'кофе купить', 1] })).toEqual(['кофемашина', 'кофе', 'кофе купить']);
   });
-  it('терпит объектную и альтернативные формы (suggest[]/serp[])', () => {
-    expect(parseSuggest({ results: [{ suggest: 'a' }, { suggest: 'b' }] })).toEqual(['a', 'b']);
+  it('маркер типа строкой («1», Perl-сериализация) тоже отсеивается', () => {
+    expect(parseSuggest({ results: ['кофе', '1', 'чай', '1'] })).toEqual(['кофе', 'чай']);
+  });
+  it('объектная форма с type-сиблингом: type игнорируется', () => {
+    expect(
+      parseSuggest({
+        results: [
+          { suggest: 'iphone 15', type: 0 },
+          { suggest: 'iphone 15 pro', type: 0 },
+        ],
+      }),
+    ).toEqual(['iphone 15', 'iphone 15 pro']);
+  });
+  it('терпит альтернативные формы (suggest[]/serp[]); link подсказкой не считается', () => {
     expect(parseSuggest({ suggest: ['a', 'b'] })).toEqual(['a', 'b']);
     expect(parseSuggest({ serp: [{ anchor: 'купить' }] })).toEqual(['купить']);
+    expect(parseSuggest({ serp: [{ link: 'http://x.com' }] })).toEqual([]);
   });
   it('пусто → []', () => {
     expect(parseSuggest({})).toEqual([]);

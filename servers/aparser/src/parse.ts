@@ -119,23 +119,25 @@ export function allResults(data: any): any[] {
   return data && Array.isArray(data.results) ? data.results : [];
 }
 
+/** Подсказка из объектного элемента (без алиаса link — URL подсказкой не является). */
+const suggestFromObjects = (arr: any[]): string[] =>
+  arr.map((x: any) => str(typeof x === 'string' ? x : pick(x, ['suggest', 'anchor', 'keyword', 'text']))).filter(Boolean);
+
 /**
  * Подсказки из suggest-парсера. В rawResults SE::*::Suggest отдаёт results ПЛОСКИМ
- * массивом [suggest, type, suggest, type, …] — оставляем строки, числа-типы отсеиваем.
+ * массивом [suggest, type, suggest, type, …]; маркер типа — целое число (иногда строкой
+ * «1», т.к. A-Parser на Perl), поэтому отсеиваем чисто числовые элементы, а не только JS-числа.
  * Терпит и объектные/альтернативные формы (suggest[]/serp[]) на случай других парсеров.
  */
 export function parseSuggest(result: any): string[] {
   const r = result || {};
-  const raw = Array.isArray(r.results)
-    ? r.results
-    : Array.isArray(r.suggest)
-      ? r.suggest
-      : Array.isArray(r.suggestions)
-        ? r.suggestions
-        : Array.isArray(r.serp)
-          ? r.serp
-          : [];
-  return raw.map((x: any) => str(typeof x === 'string' ? x : pick(x, ['suggest', 'anchor', 'keyword', 'text', 'link']))).filter(Boolean);
+  if (Array.isArray(r.results)) {
+    if (r.results.some((x: any) => x && typeof x === 'object')) return suggestFromObjects(r.results);
+    // плоский скалярный [suggest, type, …]: числовые маркеры типа (в т.ч. строкой) отбрасываем
+    return r.results.map(str).filter((x) => x && !/^\d+$/.test(x));
+  }
+  const raw = Array.isArray(r.suggest) ? r.suggest : Array.isArray(r.suggestions) ? r.suggestions : Array.isArray(r.serp) ? r.serp : [];
+  return suggestFromObjects(raw);
 }
 
 export interface InstanceInfo {
