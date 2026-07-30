@@ -41,27 +41,45 @@ describe('normSerpItem', () => {
 });
 
 describe('parseSerpResult', () => {
-  it('нормализует serp/related/ads, totalcount и success', () => {
+  it('реальная форма SE::Google: query-объект, related {key}, serp по индексу', () => {
     const r = parseSerpResult({
-      query: 'купить окна',
+      query: { query: 'купить окна', orig: 'купить окна', first: 'купить окна' },
       success: 1,
       totalcount: '1 200 000',
       serp: [
-        { link: 'https://x.ru', anchor: 'X', snippet: 's1' },
+        { link: 'https://x.ru', anchor: 'X', snippet: 's1', flags: { amp: 0 } },
         { link: 'https://y.ru', anchor: 'Y', snippet: 's2' },
       ],
-      related: [{ anchor: 'окна пвх' }, 'стеклопакеты'],
-      ads: [{ link: 'https://ad.ru', anchor: 'Ad', snippet: 'buy' }],
+      related: [{ key: 'окна пвх' }, { key: 'стеклопакеты' }],
+      ads: [{ link: 'https://ad.ru', anchor: 'Ad', snippet: 'buy', position: 1 }],
     });
+    expect(r.query).toBe('купить окна');
     expect(r.success).toBe(true);
     expect(r.totalcount).toBe(1200000);
     expect(r.count).toBe(2);
-    expect(r.serp[0]).toEqual({ position: 1, url: 'https://x.ru', anchor: 'X', snippet: 's1' });
+    expect(r.serp[0]).toEqual({ position: 1, url: 'https://x.ru', anchor: 'X', snippet: 's1', flags: { amp: 0 } });
     expect(r.serp[1].position).toBe(2);
     expect(r.related).toEqual(['окна пвх', 'стеклопакеты']);
     expect(r.ads[0].url).toBe('https://ad.ru');
+    expect(r.diagnostic).toBeUndefined();
   });
-  it('пустой/битый результат → безопасные значения', () => {
+  it('пустые «none» → null (totalcount/misspell)', () => {
+    const r = parseSerpResult({ query: { query: 'q' }, success: 1, totalcount: 'none', misspell: 'none', serp: [] });
+    expect(r.totalcount).toBeNull();
+    expect(r.misspell).toBeNull();
+  });
+  it('провал (success:0 + reCaptcha) → diagnostic про капчу', () => {
+    const r = parseSerpResult({
+      query: { query: 'coffee' },
+      success: 0,
+      totalcount: 'none',
+      serp: [],
+      info: { success: 0, retries: 22, stats: { reCaptchaShows: 8, retries: 22 } },
+    });
+    expect(r.success).toBe(false);
+    expect(r.diagnostic).toMatch(/reCaptcha/i);
+  });
+  it('пустой/битый результат → безопасные значения без diagnostic', () => {
     expect(parseSerpResult(null)).toEqual({
       query: '',
       success: true,
@@ -72,7 +90,6 @@ describe('parseSerpResult', () => {
       related: [],
       ads: [],
     });
-    expect(parseSerpResult({ success: false }).success).toBe(false);
   });
 });
 
@@ -89,9 +106,19 @@ describe('firstResult / allResults', () => {
 });
 
 describe('parseSuggest', () => {
-  it('берёт подсказки из suggest[]/serp[], строки и объекты', () => {
-    expect(parseSuggest({ suggest: ['iphone 15', 'iphone 15 pro'] })).toEqual(['iphone 15', 'iphone 15 pro']);
-    expect(parseSuggest({ serp: [{ anchor: 'купить' }, { suggest: 'купить дёшево' }] })).toEqual(['купить', 'купить дёшево']);
+  it('реальная форма SE::*::Suggest: results[].suggest', () => {
+    expect(
+      parseSuggest({
+        results: [
+          { suggest: 'iphone 15', type: 0 },
+          { suggest: 'iphone 15 pro', type: 0 },
+        ],
+      }),
+    ).toEqual(['iphone 15', 'iphone 15 pro']);
+  });
+  it('терпит альтернативные формы suggest[]/serp[]', () => {
+    expect(parseSuggest({ suggest: ['a', 'b'] })).toEqual(['a', 'b']);
+    expect(parseSuggest({ serp: [{ anchor: 'купить' }] })).toEqual(['купить']);
   });
   it('пусто → []', () => {
     expect(parseSuggest({})).toEqual([]);

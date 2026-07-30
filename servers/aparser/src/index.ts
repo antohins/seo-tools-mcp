@@ -10,9 +10,9 @@
  *
  * Модель прокси A-Parser: прокси → Proxy Checker (именованная «пачка», демон
  * держит alive-список) → config-пресет парсера (useproxy + какие чекеры). Выбор
- * пачки на запуск задаётся в пресете; per-request её можно указать через checkers
- * (проверяется getProxies, прокидывается в override). Точный override-ключ и имена
- * полей serp[] подтверждаются на живом инстансе — изолированы в build-хелперах ниже.
+ * пачки на запуск задаётся в пресете полем proxyChecker (дефолт "*" = все); per-request
+ * её переопределяем через checkers. Формат/ключи override и поля serp[] сверены на
+ * живом инстансе A-Parser v1.2.3527.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -42,12 +42,8 @@ import {
 
 loadSharedEnv();
 
-/**
- * LIVE-VERIFY: точный id override-ключа выбора прокси-чекера в options.
- * Подтвердить через aparser_get_preset на реальном инстансе (в пресете есть поле
- * «Use proxy checkers»). Правится в одном месте.
- */
-const PROXY_CHECKER_OVERRIDE_ID = 'proxychecker';
+/** Ключ выбора прокси-чекера (пачки) в override-опциях; сверено с пресетом (дефолт "*"). */
+const PROXY_CHECKER_OVERRIDE_ID = 'proxyChecker';
 
 /** POST к A-Parser API: {action,password,data}; success!==1 → осмысленная ошибка. */
 async function aparserCall(action: string, data: Record<string, unknown>, account?: string): Promise<any> {
@@ -291,7 +287,6 @@ server.registerTool(
       domain: z.string().optional().describe('Домен Google (google.com/google.ru…)'),
       hl: z.string().optional().describe('Язык интерфейса (hl)'),
       gl: z.string().optional().describe('Страна поиска (gl)'),
-      device: z.enum(['desktop', 'mobile']).default('desktop'),
       ...execInput,
     },
   },
@@ -300,7 +295,6 @@ server.registerTool(
     await ensureProxies(useProxy, checkers, args.account);
     const options = buildOverrides({
       pagecount: args.pages,
-      device: args.device,
       domain: args.domain,
       hl: args.hl,
       gl: args.gl,
@@ -326,7 +320,6 @@ server.registerTool(
       query: z.string().min(1),
       pages: z.number().int().min(1).max(10).default(1),
       region: z.string().default('Москва').describe('«Москва»/«Россия»/213 — id региона Яндекса (lr)'),
-      device: z.enum(['desktop', 'mobile']).default('desktop'),
       ...execInput,
     },
   },
@@ -336,7 +329,6 @@ server.registerTool(
     const lr = resolveRegionId(args.region);
     const options = buildOverrides({
       pagecount: args.pages,
-      device: args.device,
       lr: lr,
       useproxy: useProxy,
       [PROXY_CHECKER_OVERRIDE_ID]: checkers ? checkers.join(',') : undefined,

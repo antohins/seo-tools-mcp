@@ -1,10 +1,11 @@
 /**
  * Чистые парсеры ответов A-Parser API (без сети — покрыты юнит-тестами).
  *
- * Формы ответов сверены по докам a-parser.com/docs/en/api/methods и офиц. PHP-клиенту.
- * Доступ к полям намеренно защитный (несколько алиасов на ключ): точные имена
- * полей serp[] у SE::Google/SE::Yandex подтверждаются на живом инстансе — при
- * расхождении правится только маппинг здесь, интерфейс инструментов не меняется.
+ * Формы сверены на живом инстансе A-Parser v1.2.3527 (getParserInfo + oneRequest):
+ *  - SE::Google/SE::Yandex serp[] = {link, anchor, snippet, flags, …}; позиция по индексу;
+ *  - query приходит объектом {query,orig,first}; related — массив {key};
+ *  - пустые значения приходят строкой «none»; SE::*::Suggest кладёт results[].suggest.
+ * Доступ к полям защитный (алиасы) — при вариациях правится только маппинг здесь.
  */
 
 /** Число из строки/значения: терпит пробелы-разделители («132 584»), иначе 0. */
@@ -15,6 +16,13 @@ export const num = (v: unknown): number => {
 
 const str = (v: unknown): string => (v == null ? '' : String(v));
 
+/** A-Parser отдаёт пустые значения строкой «none» — трактуем как пусто. */
+const NONE = new Set(['', 'none', 'None', 'NONE']);
+const clean = (v: unknown): string => {
+  const s = str(v);
+  return NONE.has(s) ? '' : s;
+};
+
 /** Первое непустое значение по списку ключей-алиасов. */
 const pick = (o: any, keys: string[]): unknown => {
   if (!o || typeof o !== 'object') return undefined;
@@ -23,6 +31,14 @@ const pick = (o: any, keys: string[]): unknown => {
   }
   return undefined;
 };
+
+/** query приходит объектом {query,orig,first} (rawResults) или строкой — приводим к строке. */
+function queryString(q: unknown): string {
+  if (q == null) return '';
+  if (typeof q === 'string') return q;
+  if (typeof q === 'object') return str(pick(q, ['query', 'orig', 'first']));
+  return str(q);
+}
 
 export interface SerpItem {
   position: number;
@@ -53,6 +69,18 @@ export interface SerpResult {
   serp: SerpItem[];
   related: string[];
   ads: SerpItem[];
+  diagnostic?: string;
+}
+
+/** Человекочитаемая причина пустой выдачи (капча/выжженные прокси) из info.stats. */
+function diagnose(r: any): string {
+  const stats = (r && r.info && r.info.stats) || {};
+  const captcha = num(stats.reCaptchaShows);
+  const retries = num(stats.retries ?? (r && r.info && r.info.retries));
+  if (captcha > 0) {
+    return `Поисковик отдал reCaptcha (${captcha} показов за ${retries} ретраев), прокси её не решили — нужны свежие/качественные прокси или решатель капчи (Util::ReCaptcha2).`;
+  }
+  return `Выдача не получена за ${retries} ретраев — вероятно, прокси выжжены или заблокированы. Проверьте aparser_proxies.`;
 }
 
 /** Нормализует один result-объект oneRequest/bulkRequest в стабильную SERP-форму. */
@@ -61,16 +89,23 @@ export function parseSerpResult(result: any): SerpResult {
   const serp = Array.isArray(r.serp) ? r.serp : [];
   const related = Array.isArray(r.related) ? r.related : [];
   const ads = Array.isArray(r.ads) ? r.ads : [];
-  return {
-    query: str(r.query),
-    success: r.success !== false && r.success !== 0,
+  const success = r.success !== false && r.success !== 0;
+  const misspell = clean(r.misspell);
+  const out: SerpResult = {
+    query: queryString(r.query),
+    success,
     totalcount: num(pick(r, ['totalcount', 'totalCount'])) || null,
-    misspell: r.misspell ? str(r.misspell) : null,
+    misspell: misspell || null,
     count: serp.length,
     serp: serp.map(normSerpItem),
-    related: related.map((x: any) => str(typeof x === 'string' ? x : pick(x, ['anchor', 'keyword', 'query', 'text']))).filter(Boolean),
+    // Google/Yandex related — массив {key}; терпим и алиасы на случай других парсеров.
+    related: related
+      .map((x: any) => str(typeof x === 'string' ? x : pick(x, ['key', 'anchor', 'keyword', 'query', 'text'])))
+      .filter(Boolean),
     ads: ads.map(normSerpItem),
   };
+  if (!success) out.diagnostic = diagnose(r);
+  return out;
 }
 
 /** results[0] из data (oneRequest — один запрос). */
@@ -84,10 +119,18 @@ export function allResults(data: any): any[] {
   return data && Array.isArray(data.results) ? data.results : [];
 }
 
-/** Подсказки из suggest-парсера (SE::*::Suggest): терпит suggest[]/suggestions[]/serp[]. */
+/** Подсказки из suggest-парсера (SE::*::Suggest → results[].suggest); терпит и suggest[]/serp[]. */
 export function parseSuggest(result: any): string[] {
   const r = result || {};
-  const raw = Array.isArray(r.suggest) ? r.suggest : Array.isArray(r.suggestions) ? r.suggestions : Array.isArray(r.serp) ? r.serp : [];
+  const raw = Array.isArray(r.results)
+    ? r.results
+    : Array.isArray(r.suggest)
+      ? r.suggest
+      : Array.isArray(r.suggestions)
+        ? r.suggestions
+        : Array.isArray(r.serp)
+          ? r.serp
+          : [];
   return raw.map((x: any) => str(typeof x === 'string' ? x : pick(x, ['suggest', 'anchor', 'keyword', 'text', 'link']))).filter(Boolean);
 }
 
