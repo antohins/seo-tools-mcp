@@ -159,6 +159,14 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
   `ai=1` — ПЛАТНЫЙ параметр (доп. тарификация, замедляет выдачу, только Google): в `<ai><answer>`
   приходит base64-кодированный HTML обзора (~200 КБ), ссылок отдельным элементом нет — извлекаются
   из HTML; шлём только по `includeAIOverview=true` и только на первой странице.
+  Гео-таргетинг Google (`xmlriver_serp`/`xmlriver_suggest`, лайв 2026-08): `location` (город →
+  `loc`, Google criteria ID — 1011969 Москва / 1012040 СПб дают разную выдачу) и `country`
+  (числовой id страны, RU=2643); country автовыводится из города, явный перекрывает; Яндексу
+  loc/country НЕ шлём. Резолв — `servers/xmlriver/src/geo.ts`: справочник `geo.csv` (~5 МБ,
+  скачивается раз, дисковый кэш `~/.config/seo-tools-mcp/cache/`, TTL 7 дней, in-flight дедуп),
+  маппинги стран/доменов — `data.ts` (COUNTRIES/DOMAINS, конвертированы из справочников
+  countries.xlsx/domains.xlsx; JSON под NodeNext не импортируется без import attributes,
+  поэтому данные в TS); `domain` для Google маппится в числовой id (ru → 143).
   Подсказки (`xmlriver_suggest`): POST `setab=tips` с JSON-телом `{"phrases":[...]}` (1–50 фраз),
   ответ — плоский `{"phrases":[...]}` (~10 на фразу в порядке входа), ПЛАТНО за каждую фразу;
   ошибки — HTTP 200 с JSON `{"code","error"}`. «Вопросы по теме» / PAA

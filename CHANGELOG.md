@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **xmlriver**: Google geo-targeting for `xmlriver_serp` (google engine) and `xmlriver_suggest` —
+  new `location` and `country` parameters. `location` (English city name, e.g. "Moscow", or a
+  numeric Google criteria ID like "1011969") resolves to the `loc` API parameter via the XMLRiver
+  `geo.csv` reference (~5 MB, downloaded once, disk cache under `~/.config/seo-tools-mcp/cache/`,
+  7-day TTL, in-flight dedup; ambiguous names prefer a `country` match, otherwise first hit + a
+  note). `country` (ISO code or numeric XMLRiver id, RU=2643) is auto-derived from the city and
+  overridden by an explicit value; the applied geo is echoed in the response `geo` field.
+  Yandex requests never receive `loc`/`country` (Yandex geo stays on `region`/`lr`).
+  `searchDomain` for Google is now mapped to the numeric domain id (`ru` → 143) per the API
+  docs, with a string passthrough fallback for unknown domains; reference tables live in
+  `servers/xmlriver/src/data.ts` (184 countries, 199 domains).
 - **xmlriver**: new `xmlriver_related_questions` tool — the Google "People Also Ask" block
   via `setab=rq` (PAID per request; `count` is a mandatory API parameter, 1–50).
   Returns `{ questions: [{ question, title?, snippet?, url? }], count, answers_available,

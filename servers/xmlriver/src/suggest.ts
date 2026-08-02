@@ -8,7 +8,8 @@
  *  - тарификация ЗА КАЖДУЮ фразу (50 фраз = 50 списаний) — по доке api-tips;
  *  - ошибки — HTTP 200 с JSON {"code","error"} (напр. code 3 — «Ошибка парсинга JSON запроса
  *    или запрос пустой»); деньги за ошибку не списываем (cost.track не вызываем);
- *  - доп. URL-параметры гео/языка: loc, country, lr (поддержан только lr — как в xmlriver_serp).
+ *  - доп. URL-параметры гео/языка (по доке api-tips): loc, country, lr — поддержаны все три
+ *    (loc/country приходят сюда уже готовыми числами из geo.js, lr — через resolveLr).
  */
 import { fetchText, requireEnv } from '@seo-tools/shared';
 import { z } from 'zod';
@@ -52,13 +53,21 @@ export function groupByPhrase(suggestions: string[], inputs: string[]): Pick<Sug
 /**
  * Один POST setab=tips на пачку фраз. HTTP-ретраи/таймаут — как у xmlriverGet (fetchText);
  * JSON-ошибка {"code","error"} и не-JSON ответ — понятный throw БЕЗ списания.
+ * geo — готовые числовые loc/country (резолв в geo.js); lr — через region (Яндекс-id).
  */
-export async function collectSuggest(phrases: string[], region?: string, account?: string): Promise<SuggestResult> {
+export async function collectSuggest(
+  phrases: string[],
+  region?: string,
+  account?: string,
+  geo?: { loc?: number; country?: number },
+): Promise<SuggestResult> {
   const user = requireEnv('XMLRIVER_USER', account);
   const key = requireEnv('XMLRIVER_KEY', account);
   const qs = new URLSearchParams({ user, key, setab: 'tips' });
   const lr = resolveLr(region);
   if (lr !== undefined) qs.set('lr', String(lr));
+  if (geo?.loc !== undefined) qs.set('loc', String(geo.loc));
+  if (geo?.country !== undefined) qs.set('country', String(geo.country));
   const url = `${GOOGLE_URL}?${qs}`;
 
   const text = await fetchText(url, {

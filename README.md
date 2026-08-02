@@ -41,11 +41,11 @@
 > Wordstat через XMLStock — тем же ключом `XMLSTOCK_*`, что и SERP; **не нужен Yandex Cloud** (в отличие от отдельного сервера `wordstat`).
 
 ### xmlriver — SERP Google/Яндекс + проверка индексации
-- `xmlriver_serp` — органика Google/Яндекса (глубина добирается пагинацией: каждые 10 позиций = 1 платный запрос), флаг наличия AI Overview; опция `includeAIOverview` — полный текст Обзора от ИИ + цитируемые ссылки (платный `ai=1`, только Google)
+- `xmlriver_serp` — органика Google/Яндекса (глубина добирается пагинацией: каждые 10 позиций = 1 платный запрос), флаг наличия AI Overview; опция `includeAIOverview` — полный текст Обзора от ИИ + цитируемые ссылки (платный `ai=1`, только Google); гео-таргетинг Google — `location` (город → `loc`, «Moscow»/«1011969») и `country` (ISO/числовой id, автовыводится из города)
 - `xmlriver_images` — картинки Google (страница + url картинки + заголовок + источник + размеры)
 - `xmlriver_news` — новости Google (заголовок, источник, дата, сниппет), фильтр по времени
 - `xmlriver_check_index` — проверка индексации URL в Google/Яндексе (`inindex`)
-- `xmlriver_suggest` — поисковые подсказки Google (до 50 фраз за вызов, платно за каждую фразу)
+- `xmlriver_suggest` — поисковые подсказки Google (до 50 фраз за вызов, платно за каждую фразу); гео подсказок — `location`/`country`
 - `xmlriver_related_questions` — блок «Вопросы по теме» / People Also Ask Google (вопросы всегда; ответы — только при включённой платной опции «Related Questions с ответами» в кабинете)
 - `xmlriver_balance` — баланс аккаунта / проверка ключа (бесплатно)
 

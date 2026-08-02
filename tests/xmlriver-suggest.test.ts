@@ -127,6 +127,20 @@ describe('collectSuggest', () => {
     expect(fetchUrl(fetch, 1).searchParams.get('lr')).toBeNull();
   });
 
+  it('geo → loc/country в URL; без geo не шлются', async () => {
+    const fetch = vi.fn().mockResolvedValue(fakeRes(JSON.stringify({ phrases: tips('x', 10) })));
+    vi.stubGlobal('fetch', fetch);
+
+    await suggest.collectSuggest(['x'], undefined, undefined, { loc: 1011969, country: 2643 });
+    const url = fetchUrl(fetch, 0);
+    expect(url.searchParams.get('loc')).toBe('1011969');
+    expect(url.searchParams.get('country')).toBe('2643');
+
+    await suggest.collectSuggest(['x']);
+    expect(fetchUrl(fetch, 1).searchParams.get('loc')).toBeNull();
+    expect(fetchUrl(fetch, 1).searchParams.get('country')).toBeNull();
+  });
+
   it('HTTP 500 → HttpError после ретраев shared fetchText, БЕЗ списания', async () => {
     vi.useFakeTimers();
     try {

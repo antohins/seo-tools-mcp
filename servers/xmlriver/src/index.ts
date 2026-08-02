@@ -23,7 +23,13 @@
  *  - «Вопросы по теме» Google / People Also Ask (xmlriver_related_questions): GET setab=rq,
  *    count ОБЯЗАТЕЛЕН (без него ошибка 15), макс. 50. Вопросы (question) парсятся всегда;
  *    title/snippet/url ПУСТЫЕ, пока в кабинете XMLRiver не включена платная опция
- *    «Related Questions с ответами». Нет PAA-блока → код 15 (тарифицируется, empty: true).
+ *    «Related Questions с ответами». Нет PAA-блока → код 15 (тарифицируется, empty: true);
+ *  - гео-таргетинг Google (xmlriver_serp/xmlriver_suggest, лайв 2026-08): location (город →
+ *    loc, Google criteria ID — работает: 1011969 Москва / 1012040 СПб дают разную выдачу) и
+ *    country (числовой id страны, RU=2643); country автовыводится из города, явный перекрывает.
+ *    Резолв города — через справочник geo.csv (~5 МБ, скачивается раз, кэш на диске
+ *    ~/.config/seo-tools-mcp/cache/, TTL 7 дней), маппинги стран/доменов — ./data.js
+ *    (см. ./geo.js). Яндексу loc/country НЕ шлём (его гео — region/lr).
  * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода),
  * сбор подсказок — в ./suggest.js, сбор «Вопросов по теме» — в ./related.js.
  */
@@ -40,6 +46,7 @@ import {
   safeHandler,
 } from '@seo-tools/shared';
 import { z } from 'zod';
+import { resolveCountry, resolveLocation } from './geo.js';
 import { collectRelatedQuestions } from './related.js';
 import { buildSerpParams, buildVerticalParams, checkIndex, collectSerp, collectVertical, GOOGLE_URL, YANDEX_URL } from './serp.js';
 import { collectSuggest, suggestPhrasesSchema } from './suggest.js';
@@ -82,6 +89,28 @@ const serpRegionParam = z
     '«Москва»/«Россия»/213/225 — ОДИН регион (название или id Яндекса, lr). Шлётся только Яндексу; органика Google гео-инвариантна, lr для Google не отправляется.',
   );
 
+// Гео-таргетинг Google: location (город → loc) + country (ISO/id → числовой id XMLRiver).
+// Общие описания для xmlriver_serp и xmlriver_suggest.
+const geoLocationParam = (scope: string) =>
+  z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      `Локальная выдача Google по городу (${scope}): название на английском («Moscow», «Saint Petersburg») или числовой Google criteria ID ` +
+        '(«1011969»). Резолвится в параметр loc; при первом использовании скачивается справочник geo.csv XMLRiver (~5 МБ, кэш на диске 7 дней). ' +
+        'Страна выводится из города автоматически',
+    );
+const geoCountryParam = (scope: string) =>
+  z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      `Страна выдачи Google (${scope}): ISO-код («RU», «US») или числовой id XMLRiver («2643»). ` +
+        'Без location — задаёт страну отдельно; с location — перекрывает автовыведенную из города',
+    );
+
 server.registerTool(
   'xmlriver_serp',
   {
@@ -92,12 +121,16 @@ server.registerTool(
       '{ present, available, text?, links? } (полный текст AIO и цитируемые ссылки, ПЛАТНО — ai=1), ' +
       'results: [{ position, url, title, snippet, text_bolds }], serp_features: { sitelinks_top1, packs } }. ' +
       'Пустая выдача (код 15) ТАРИФИЦИРУЕТСЯ и помечается { results: [], empty: true, note }. ' +
+      'Гео-таргетинг Google (engine=google): location — локальная выдача по городу («Moscow»/«1011969» → loc), ' +
+      'country — страна («RU»/«2643», автовыводится из города); применённое гео эхом возвращается в поле geo. ' +
       'ПРИМЕЧАНИЕ: подсветки <hlword> XMLRiver не отдаёт (проверено лайвом 2026-07), text_bolds всегда пуст.',
     inputSchema: {
       query: z.string().min(1),
       engine: z.enum(['google', 'yandex']).default('google'),
       device: z.enum(['desktop', 'mobile']).default('desktop'),
       region: serpRegionParam,
+      location: geoLocationParam('только engine=google; для yandex игнорируется — гео Яндекса задаётся region/lr'),
+      country: geoCountryParam('только engine=google; для yandex игнорируется'),
       depth: z
         .number()
         .int()
@@ -126,7 +159,7 @@ server.registerTool(
         .string()
         .regex(/^[a-z]{2,3}(\.[a-z]{2,3})?$/)
         .optional()
-        .describe('Доменная зона: google — ru/com/de..., yandex — ru/by/kz (по умолчанию ru)'),
+        .describe('Доменная зона: google — ru/com/de... (маппится в числовой id домена, ru → 143), yandex — ru/by/kz (по умолчанию ru)'),
       lang: z
         .string()
         .regex(/^[a-z]{2}(-[a-zA-Z]{2,4})?$/)
@@ -149,9 +182,27 @@ server.registerTool(
     const isGoogle = args.engine === 'google';
     const base = isGoogle ? GOOGLE_URL : YANDEX_URL;
 
+    // Гео-таргетинг Google: location → loc (+ автовывод country из города), явный country
+    // перекрывает автовывод. Для yandex не применяется — там гео задаёт region/lr.
+    let geo: { loc?: number; country?: number; note?: string } | undefined;
+    if (isGoogle) {
+      if (args.location) {
+        geo = await resolveLocation(args.location, args.country);
+      } else if (args.country) {
+        geo = { country: resolveCountry(args.country) };
+      }
+    }
+
     // ai=1 — только Google и только на первой странице (реализовано внутри collectSerp)
     const wantAio = isGoogle && args.includeAIOverview;
-    const collected = await collectSerp(base, buildSerpParams(args), args.depth, args.account, wantAio);
+    // args.country — строка из схемы, в params уходит число из geo (или undefined)
+    const collected = await collectSerp(
+      base,
+      buildSerpParams({ ...args, loc: geo?.loc, country: geo?.country }),
+      args.depth,
+      args.account,
+      wantAio,
+    );
     let results = collected.results;
     if (args.excludeAggregators) {
       const aggs = aggregators();
@@ -166,6 +217,7 @@ server.registerTool(
       engine: args.engine,
       device: args.device,
       region: args.region,
+      ...(geo ? { geo } : {}),
       found: collected.found,
       truncated: collected.truncated,
       ai_overview: isGoogle ? (wantAio ? collected.aiOverview : { present: collected.ai }) : false,
@@ -281,17 +333,30 @@ server.registerTool(
       'Поисковые подсказки Google через XMLRiver (setab=tips). ПЛАТНО за КАЖДУЮ фразу: N фраз = N списаний, до 50 фраз за вызов. ' +
       'Возвращает { phrases: string[] — плоский список в порядке входных фраз (~10 подсказок на фразу), ' +
       'byPhrase: Record<фраза, string[]> — группировка по входным фразам, если подсказок поровну на фразу (иначе null + note), ' +
-      'count, charged (число тарифицированных фраз) }.',
+      'count, charged (число тарифицированных фраз) }. Гео подсказок: location (город → loc, «Moscow»/«1011969») и country («RU»/«2643») — ' +
+      'применённое гео эхом возвращается в поле geo.',
     inputSchema: {
       phrases: suggestPhrasesSchema.describe('Фразы для сбора подсказок (1–50; ПЛАТНО за каждую: N фраз = N списаний)'),
       region: z
         .string()
         .optional()
         .describe('«Москва»/«Россия»/213/225 — ОДИН регион подсказок (название или id Яндекса, lr); без него — без гео'),
+      location: geoLocationParam('подсказки'),
+      country: geoCountryParam('подсказки'),
       account: accountParam,
     },
   },
-  safeHandler(async (args) => jsonResult(await collectSuggest(args.phrases, args.region, args.account))),
+  safeHandler(async (args) => {
+    // гео Google-подсказок: location → loc (+ автовывод country), явный country перекрывает
+    let geo: { loc?: number; country?: number; note?: string } | undefined;
+    if (args.location) {
+      geo = await resolveLocation(args.location, args.country);
+    } else if (args.country) {
+      geo = { country: resolveCountry(args.country) };
+    }
+    const result = await collectSuggest(args.phrases, args.region, args.account, geo);
+    return jsonResult({ ...result, ...(geo ? { geo } : {}) });
+  }),
 );
 
 server.registerTool(

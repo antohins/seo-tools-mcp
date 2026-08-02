@@ -15,11 +15,18 @@
  *    ПЛАТНЫЙ параметр (доп. тарификация, замедляет выдачу), шлём только по явному
  *    includeAIOverview=true и только на первой странице Google;
  *  - у Google XMLRiver lr — код языка, а не регион: id региона Яндекса шлём только Яндексу;
+ *  - гео-таргетинг Google — loc (Google criteria ID города) + country (числовой id страны
+ *    XMLRiver): резолв в ./geo.js, сюда приходят уже готовые числа; Яндексу не шлём
+ *    (его гео — существующий region/lr);
+ *  - domain по доке — числовой id (google.ru = 143): для Google маппим строку домена
+ *    через resolveDomainId (./geo.js, справочник DOMAINS из ./data.js); строка тоже
+ *    принималась API (старое поведение), но дока требует число;
  *  - у Яндекса XMLRiver filter — «скрывать похожие результаты» (включается filter=1),
  *    а не family-filter: moderate/strict/none туда слать нельзя — не шлём вовсе.
  */
 import { CostLogger, fetchText, getConfig, requireEnv, resolveRegionId, sleep } from '@seo-tools/shared';
 import { asArray, parseDocs, parseXml, type SerpDoc, stripTags } from '@seo-tools/shared/serp';
+import { resolveDomainId } from './geo.js';
 
 export const GOOGLE_URL = 'https://xmlriver.com/search/xml';
 export const YANDEX_URL = 'https://xmlriver.com/search_yandex/xml';
@@ -348,11 +355,16 @@ export interface SerpParamsArgs {
   exactQuery: boolean;
   safeSearch: 'moderate' | 'strict' | 'off';
   includeAds: boolean;
+  /** Google criteria ID города (из resolveLocation) — только engine=google */
+  loc?: number;
+  /** числовой id страны XMLRiver (явный или автовывод из города) — только engine=google */
+  country?: number;
 }
 
 /**
  * Общие параметры xmlriver_serp. lr шлём ТОЛЬКО Яндексу (у Google XMLRiver lr — код языка,
- * id региона Яндекса туда слать нельзя). filter Яндексу НЕ шлём: у XMLRiver Яндекс filter —
+ * id региона Яндекса туда слать нельзя). loc/country — ТОЛЬКО Google (гео Яндекса — lr).
+ * filter Яндексу НЕ шлём: у XMLRiver Яндекс filter —
  * «скрывать похожие результаты» (filter=1), семантически это не family-filter.
  */
 export function buildSerpParams(args: SerpParamsArgs): Record<string, string | number | undefined> {
@@ -360,8 +372,9 @@ export function buildSerpParams(args: SerpParamsArgs): Record<string, string | n
   const common: Record<string, string | number | undefined> = {
     query: args.query,
     device: args.device,
-    // domain=ru строкой Google принимает без ошибки (проверено лайвом)
-    domain: args.searchDomain ?? 'ru',
+    // Google: домен маппим в числовой id (дока требует число; неизвестный — строкой как раньше).
+    // Яндексу оставляем строку ('ru' и т.п. — проверено лайвом).
+    domain: isGoogle ? resolveDomainId(args.searchDomain ?? 'ru') : (args.searchDomain ?? 'ru'),
   };
   if (!isGoogle) {
     const lr = resolveLr(args.region);
@@ -369,6 +382,8 @@ export function buildSerpParams(args: SerpParamsArgs): Record<string, string | n
   }
   if (args.includeAds) common.ads = 1;
   if (isGoogle) {
+    if (args.loc !== undefined) common.loc = args.loc;
+    if (args.country !== undefined) common.country = args.country;
     if (args.lang) common.hl = args.lang;
     if (args.period) common.tbs = args.period;
     if (args.exactQuery) common.nfpr = 1;
@@ -392,7 +407,7 @@ export function buildVerticalParams(args: {
   return {
     query: args.query,
     device: args.device,
-    domain: args.searchDomain ?? 'ru',
+    domain: resolveDomainId(args.searchDomain ?? 'ru'),
   };
 }
 
