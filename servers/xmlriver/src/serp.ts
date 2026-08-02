@@ -11,7 +11,9 @@
  *  - highlights=1 на практике НЕ возвращает <hlword> (CDATA есть, подсветок нет) — не запрашиваем,
  *    text_bolds всегда пуст;
  *  - <ai><present>1</present></ai> приходит и без ai=1; полный текст AI Overview
- *    (ai=1 → <ai><answer>, base64 HTML) — отдельная платная фича, не запрашиваем;
+ *    (ai=1 → <ai><answer>, base64-кодированный HTML страницы обзора, ~200 КБ) —
+ *    ПЛАТНЫЙ параметр (доп. тарификация, замедляет выдачу), шлём только по явному
+ *    includeAIOverview=true и только на первой странице Google;
  *  - у Google XMLRiver lr — код языка, а не регион: id региона Яндекса шлём только Яндексу;
  *  - у Яндекса XMLRiver filter — «скрывать похожие результаты» (включается filter=1),
  *    а не family-filter: moderate/strict/none туда слать нельзя — не шлём вовсе.
@@ -135,6 +137,79 @@ export function aiPresent(doc: any): boolean {
   return String(doc?.yandexsearch?.response?.ai?.present ?? '0') === '1';
 }
 
+// --- Полный AI Overview (ai=1, ПЛАТНО): <ai><answer> — base64-кодированный HTML страницы обзора ---
+
+export interface AiOverview {
+  /** <ai><present> — Google показывает блок AIO по запросу */
+  present: boolean;
+  /** false — answer не пришёл или Google ответил «обзор недоступен» */
+  available: boolean;
+  /** текст обзора (strip tags + нормализация пробелов), cap с маркером обрезки */
+  text?: string;
+  /** цитируемые внешние ссылки из HTML обзора (дедуп, без служебных доменов Google) */
+  links?: string[];
+}
+
+const AI_TEXT_CAP = 4000;
+const AI_LINKS_CAP = 30;
+// домены служебных ссылок Google (не цитирование: search/support/accounts/политики, статика)
+const AI_SKIP_DOMAINS = ['google.com', 'gstatic.com', 'googleapis.com', 'googleusercontent.com'];
+// маркеры «обзор недоступен» в тексте AIO (встречается лайвом)
+const AI_UNAVAILABLE_RE = /обзор от ии недоступен|не удалось сгенерировать/i;
+
+/** Декодирует base64 <answer> в HTML; битые/пустые данные → пустая строка. */
+export function decodeAiAnswer(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  try {
+    return Buffer.from(raw.replace(/\s+/g, ''), 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+/** Внешние href из HTML обзора: дедуп, без служебных доменов Google, cap. */
+export function extractAiLinks(html: string, cap = AI_LINKS_CAP): string[] {
+  const re = /href\s*=\s*["'](https?:\/\/[^"'<>\s]+)["']/gi;
+  const seen = new Set<string>();
+  const links: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null && links.length < cap) {
+    const url = m[1].replace(/&amp;/g, '&');
+    if (seen.has(url)) continue;
+    let host = '';
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      continue; // невалидный URL — пропускаем
+    }
+    if (AI_SKIP_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`))) continue;
+    seen.add(url);
+    links.push(url);
+  }
+  return links;
+}
+
+/** Текст обзора: strip tags + нормализация пробелов (внутри stripTags), cap с маркером. */
+export function extractAiText(html: string, cap = AI_TEXT_CAP): string {
+  // блочные теги → пробел, иначе stripTags склеит «абзац.Ссылка» без пробела
+  const text = stripTags(html.replace(/<\/(p|div|li|ul|ol|h[1-6]|tr)>|<br\s*\/?>/gi, ' '));
+  return text.length > cap ? `${text.slice(0, cap)}… [обрезано]` : text;
+}
+
+/**
+ * Полный разбор блока <ai> при запрошенном ai=1. Отдельного элемента со ссылками
+ * в ответе XMLRiver нет — ссылки извлекаются из HTML answer. Если answer не пришёл
+ * или Google сообщил о недоступности обзора — available: false без text/links.
+ */
+export function parseAiOverview(doc: any): AiOverview {
+  const present = aiPresent(doc);
+  const html = decodeAiAnswer(doc?.yandexsearch?.response?.ai?.answer);
+  if (!html) return { present, available: false };
+  const text = extractAiText(html);
+  if (AI_UNAVAILABLE_RE.test(text)) return { present, available: false };
+  return { present, available: true, text, links: extractAiLinks(html) };
+}
+
 export interface SerpCollection {
   results: SerpDoc[];
   found: number | null;
@@ -146,17 +221,22 @@ export interface SerpCollection {
   truncated: boolean;
   /** флаг <ai><present> (AI Overview) с первой страницы */
   ai: boolean;
+  /** полный AI Overview (ai=1, платный) — только если запрошен aiOverview */
+  aiOverview?: AiOverview;
 }
 
 /**
  * Постраничный сбор органики до depth; нумерация сквозная.
  * groupby у XMLRiver мёртв (всегда 10/страницу) — не шлём; Google page с 1, Яндекс page с 0.
+ * aiOverview=true добавляет ai=1 (ПЛАТНЫЙ параметр) только в запрос первой страницы —
+ * answer один на запрос, размножать доплату на все страницы пагинации незачем.
  */
 export async function collectSerp(
   base: string,
   common: Record<string, string | number | undefined>,
   depth: number,
   account?: string,
+  aiOverview = false,
 ): Promise<SerpCollection> {
   const firstPage = base === YANDEX_URL ? 0 : 1;
   // +1 страница добора: органики на странице бывает <10
@@ -167,9 +247,10 @@ export async function collectSerp(
   let found: number | null = null;
   let empty = false;
   let ai = false;
+  let overview: AiOverview | undefined;
 
   for (let i = 0; i < maxPages && results.length < depth; i++) {
-    const doc = await xmlriverGet(base, { ...common, page: firstPage + i }, account);
+    const doc = await xmlriverGet(base, { ...common, page: firstPage + i, ...(i === 0 && aiOverview ? { ai: 1 } : {}) }, account);
     const parsed = parseDocs(doc);
     if (i === 0) {
       packs = parsed.packs;
@@ -177,6 +258,7 @@ export async function collectSerp(
       found = extractFound(doc);
       empty = isEmptySerp(doc);
       ai = aiPresent(doc);
+      if (aiOverview) overview = parseAiOverview(doc);
     }
     // перенумеровываем сквозняком
     for (const d of parsed.docs) {
@@ -186,7 +268,16 @@ export async function collectSerp(
     if (!parsed.docs.length) break; // выдача кончилась
   }
   results = results.slice(0, depth);
-  return { results, found, packs, sitelinksTop1, empty, truncated: results.length < depth, ai };
+  return {
+    results,
+    found,
+    packs,
+    sitelinksTop1,
+    empty,
+    truncated: results.length < depth,
+    ai,
+    ...(overview ? { aiOverview: overview } : {}),
+  };
 }
 
 /**

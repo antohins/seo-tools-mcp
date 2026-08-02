@@ -240,6 +240,84 @@ describe('collectSerp', () => {
     const r = await serp.collectSerp(GOOGLE, { query: 'x' }, 2);
     expect(r.ai).toBe(true);
   });
+
+  it('aiOverview=true: ai=1 шлётся ТОЛЬКО на первой странице, обзор парсится', async () => {
+    const html =
+      '<html><body><p>Купить квартиру в Москве: цены от 5 млн.</p>' +
+      '<a href="https://site-a.ru/flats">A</a><a href="https://site-b.ru/">B</a>' +
+      '<a href="https://site-a.ru/flats">A-дубль</a><a href="https://support.google.com/x">G</a></body></html>';
+    const b64 = Buffer.from(html, 'utf8').toString('base64');
+    const page1 = serpXml(docXml(10)).replace('<response>', `<response><ai><present>1</present><answer>${b64}</answer></ai>`);
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(fakeRes(page1))
+      .mockResolvedValueOnce(fakeRes(serpXml(docXml(5, 10))));
+    vi.stubGlobal('fetch', fetch);
+    const r = await serp.collectSerp(GOOGLE, { query: 'x' }, 15, undefined, true);
+    expect(fetchParam(fetch, 0, 'ai')).toBe('1');
+    expect(fetchParam(fetch, 1, 'ai')).toBeNull();
+    expect(r.aiOverview).toBeDefined();
+    expect(r.aiOverview!.present).toBe(true);
+    expect(r.aiOverview!.available).toBe(true);
+    expect(r.aiOverview!.text).toContain('Купить квартиру в Москве');
+    expect(r.aiOverview!.links).toEqual(['https://site-a.ru/flats', 'https://site-b.ru/']);
+  });
+
+  it('без aiOverview параметр ai не отправляется и aiOverview не возвращается', async () => {
+    const fetch = vi.fn().mockResolvedValue(fakeRes(serpXml(docXml(10))));
+    vi.stubGlobal('fetch', fetch);
+    const r = await serp.collectSerp(GOOGLE, { query: 'x' }, 10);
+    expect(fetchParam(fetch, 0, 'ai')).toBeNull();
+    expect(r.aiOverview).toBeUndefined();
+  });
+});
+
+describe('AI Overview (parse helpers)', () => {
+  const aioDoc = (answer?: string) => ({
+    yandexsearch: { response: { ai: { present: '1', ...(answer !== undefined ? { answer } : {}) } } },
+  });
+  const b64 = (html: string) => Buffer.from(html, 'utf8').toString('base64');
+
+  it('decodeAiAnswer: base64 → HTML, мусор → пустая строка', () => {
+    expect(serp.decodeAiAnswer(b64('<p>текст</p>'))).toBe('<p>текст</p>');
+    expect(serp.decodeAiAnswer('')).toBe('');
+    expect(serp.decodeAiAnswer(undefined)).toBe('');
+    expect(serp.decodeAiAnswer(123)).toBe('');
+  });
+
+  it('extractAiLinks: дедуп, фильтр google-служебных, cap', () => {
+    const html =
+      '<a href="https://a.ru/1">1</a><a href="https://a.ru/1">дубль</a>' +
+      '<a href="https://www.google.com/search?q=x">g</a><a href="https://accounts.google.com/s">g2</a>' +
+      '<a href="https://b.ru/?x=1&amp;y=2">b</a><a href="/relative">r</a>';
+    expect(serp.extractAiLinks(html)).toEqual(['https://a.ru/1', 'https://b.ru/?x=1&y=2']);
+    const many = Array.from({ length: 40 }, (_, i) => `<a href="https://d${i}.ru/">x</a>`).join('');
+    expect(serp.extractAiLinks(many)).toHaveLength(30);
+  });
+
+  it('extractAiText: strip tags + нормализация пробелов, cap с маркером обрезки', () => {
+    expect(serp.extractAiText('<p>Раз <b>два</b></p>\n<p>три</p>')).toBe('Раз два три');
+    const long = `<p>${'а'.repeat(5000)}</p>`;
+    const text = serp.extractAiText(long);
+    expect(text.length).toBeLessThan(4100);
+    expect(text).toMatch(/… \[обрезано\]$/);
+  });
+
+  it('parseAiOverview: present+answer → available, текст и ссылки', () => {
+    const doc = aioDoc(b64('<p>Обзор рынка.</p><a href="https://ex.ru/">ex</a>'));
+    const r = serp.parseAiOverview(doc);
+    expect(r).toEqual({ present: true, available: true, text: 'Обзор рынка. ex', links: ['https://ex.ru/'] });
+  });
+
+  it('parseAiOverview: «обзор недоступен» → available:false без text/links', () => {
+    const doc = aioDoc(b64('<div>Для этого запроса обзор от ИИ недоступен.</div>'));
+    expect(serp.parseAiOverview(doc)).toEqual({ present: true, available: false });
+  });
+
+  it('parseAiOverview: answer не пришёл → available:false; present=0 сохраняется', () => {
+    expect(serp.parseAiOverview(aioDoc())).toEqual({ present: true, available: false });
+    expect(serp.parseAiOverview({ yandexsearch: { response: {} } })).toEqual({ present: false, available: false });
+  });
 });
 
 describe('collectVertical', () => {

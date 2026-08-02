@@ -13,6 +13,8 @@
  *  - проверка индексации URL: inindex=1 (+strict) — работает и для Яндекса;
  *  - баланс: /api/get_balance/ отдаёт голое число, не JSON;
  *  - флаг AI Overview: <ai><present>1</present></ai> (приходит и без ai=1);
+ *    полный обзор (includeAIOverview → ai=1: <ai><answer> = base64 HTML, текст + ссылки)
+ *    — ПЛАТНЫЙ параметр (доп. тарификация XMLRiver, замедляет выдачу), только Google;
  *  - подсветок <hlword> XMLRiver не отдаёт (highlights=1 проверен лайвом — пусто),
  *    text_bolds будет пустым.
  * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода).
@@ -76,7 +78,8 @@ server.registerTool(
     description:
       'Слепок органической выдачи Google/Yandex через XMLRiver (ПЛАТНО: каждые 10 результатов = 1 платный запрос, ' +
       'depth добирается пагинацией). Возвращает { found, truncated (true = выдача кончилась раньше depth), ' +
-      'ai_overview (флаг присутствия AI Overview у Google; полный текст AIO не запрашивается), ' +
+      'ai_overview: { present } — флаг присутствия AI Overview у Google; при includeAIOverview=true — ' +
+      '{ present, available, text?, links? } (полный текст AIO и цитируемые ссылки, ПЛАТНО — ai=1), ' +
       'results: [{ position, url, title, snippet, text_bolds }], serp_features: { sitelinks_top1, packs } }. ' +
       'Пустая выдача (код 15) ТАРИФИЦИРУЕТСЯ и помечается { results: [], empty: true, note }. ' +
       'ПРИМЕЧАНИЕ: подсветки <hlword> XMLRiver не отдаёт (проверено лайвом 2026-07), text_bolds всегда пуст.',
@@ -102,6 +105,13 @@ server.registerTool(
         .boolean()
         .default(false)
         .describe('Добавить рекламные блоки (ads=1): реклама включается в ответ API и отражается строками в packs, отдельной секции нет'),
+      includeAIOverview: z
+        .boolean()
+        .default(false)
+        .describe(
+          'ПЛАТНО (доп. тарификация XMLRiver), замедляет выдачу: полный текст Обзора от ИИ + цитируемые ссылки (ai=1). ' +
+            'Только engine=google; для yandex параметр игнорируется и ai=1 не отправляется',
+        ),
       searchDomain: z
         .string()
         .regex(/^[a-z]{2,3}(\.[a-z]{2,3})?$/)
@@ -129,7 +139,9 @@ server.registerTool(
     const isGoogle = args.engine === 'google';
     const base = isGoogle ? GOOGLE_URL : YANDEX_URL;
 
-    const collected = await collectSerp(base, buildSerpParams(args), args.depth, args.account);
+    // ai=1 — только Google и только на первой странице (реализовано внутри collectSerp)
+    const wantAio = isGoogle && args.includeAIOverview;
+    const collected = await collectSerp(base, buildSerpParams(args), args.depth, args.account, wantAio);
     let results = collected.results;
     if (args.excludeAggregators) {
       const aggs = aggregators();
@@ -146,7 +158,7 @@ server.registerTool(
       region: args.region,
       found: collected.found,
       truncated: collected.truncated,
-      ai_overview: isGoogle ? collected.ai : false,
+      ai_overview: isGoogle ? (wantAio ? collected.aiOverview : { present: collected.ai }) : false,
       // код 15 — пустая выдача: деньги списаны, явно помечаем, чтобы не путать с «нет данных»
       ...(collected.empty ? { empty: true, note: 'пустая выдача (код 15), запрос тарифицирован' } : {}),
       count: results.length,
