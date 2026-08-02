@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **xmlriver**: new `xmlriver_suggest` tool — Google search suggestions via `setab=tips`
+  (POST `{"phrases":[...]}`, 1–50 phrases per call, PAID per phrase: N phrases = N charges).
+  Returns `{ phrases: string[] (flat, in input-phrase order, ~10 tips per phrase),
+  byPhrase: Record<phrase, string[]> | null (grouped by equal chunks when divisible,
+  otherwise null + note), count, charged }`; optional `region` (`lr`). JSON API errors
+  (`{"code","error"}`, e.g. code 3) and non-JSON responses throw without billing.
 - **xmlriver**: `xmlriver_serp` gained `includeAIOverview` — the full AI Overview via the PAID
   `ai=1` parameter (Google only, sent on the first SERP page only): the base64-HTML `<answer>`
   is decoded into `ai_overview: { present, available, text?, links? }` (cited links extracted

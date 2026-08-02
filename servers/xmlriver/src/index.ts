@@ -16,8 +16,12 @@
  *    полный обзор (includeAIOverview → ai=1: <ai><answer> = base64 HTML, текст + ссылки)
  *    — ПЛАТНЫЙ параметр (доп. тарификация XMLRiver, замедляет выдачу), только Google;
  *  - подсветок <hlword> XMLRiver не отдаёт (highlights=1 проверен лайвом — пусто),
- *    text_bolds будет пустым.
- * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода).
+ *    text_bolds будет пустым;
+ *  - подсказки Google (xmlriver_suggest): POST setab=tips с JSON-телом {"phrases":[...]}
+ *    (1–50 фраз), ответ — плоский {"phrases":[...]}, ~10 подсказок на фразу в порядке входа;
+ *    ПЛАТНО за КАЖДУЮ фразу.
+ * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода),
+ * сбор подсказок — в ./suggest.js.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -33,6 +37,7 @@ import {
 } from '@seo-tools/shared';
 import { z } from 'zod';
 import { buildSerpParams, buildVerticalParams, checkIndex, collectSerp, collectVertical, GOOGLE_URL, YANDEX_URL } from './serp.js';
+import { collectSuggest, suggestPhrasesSchema } from './suggest.js';
 import { parseImages, parseNews } from './verticals.js';
 
 loadSharedEnv();
@@ -262,6 +267,26 @@ server.registerTool(
     },
   },
   safeHandler(async (args) => jsonResult(await checkIndex(args.url, args.engine, args.strict, args.account))),
+);
+
+server.registerTool(
+  'xmlriver_suggest',
+  {
+    description:
+      'Поисковые подсказки Google через XMLRiver (setab=tips). ПЛАТНО за КАЖДУЮ фразу: N фраз = N списаний, до 50 фраз за вызов. ' +
+      'Возвращает { phrases: string[] — плоский список в порядке входных фраз (~10 подсказок на фразу), ' +
+      'byPhrase: Record<фраза, string[]> — группировка по входным фразам, если подсказок поровну на фразу (иначе null + note), ' +
+      'count, charged (число тарифицированных фраз) }.',
+    inputSchema: {
+      phrases: suggestPhrasesSchema.describe('Фразы для сбора подсказок (1–50; ПЛАТНО за каждую: N фраз = N списаний)'),
+      region: z
+        .string()
+        .optional()
+        .describe('«Москва»/«Россия»/213/225 — ОДИН регион подсказок (название или id Яндекса, lr); без него — без гео'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => jsonResult(await collectSuggest(args.phrases, args.region, args.account))),
 );
 
 server.registerTool(

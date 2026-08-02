@@ -24,8 +24,9 @@ import { asArray, parseDocs, parseXml, type SerpDoc, stripTags } from '@seo-tool
 export const GOOGLE_URL = 'https://xmlriver.com/search/xml';
 export const YANDEX_URL = 'https://xmlriver.com/search_yandex/xml';
 
-// цена читается лениво из конфига — set_credentials применяется без перезапуска
-const cost = new CostLogger('xmlriver', () => Number(getConfig('XMLRIVER_PRICE_PER_CALL') || 0.02));
+// цена читается лениво из конфига — set_credentials применяется без перезапуска.
+// Экспорт: suggest.ts использует тот же счётчик, чтобы расход по серверу суммировался.
+export const cost = new CostLogger('xmlriver', () => Number(getConfig('XMLRIVER_PRICE_PER_CALL') || 0.02));
 
 // Транзиентные коды в теле ответа (HTTP 200) — поисковая система не ответила; ретраятся.
 // Кода 55 в доке XMLRiver нет (это XMLStock) — в набор не включён. Ошибки не тарифицируются.
