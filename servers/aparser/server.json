@@ -31,6 +31,34 @@
           "format": "string",
           "isRequired": false,
           "isSecret": true
+        },
+        {
+          "name": "APARSER_GOOGLE_PRESET",
+          "description": "Default config preset for SE::Google (preset name from the GUI).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "APARSER_YANDEX_PRESET",
+          "description": "Default config preset for SE::Yandex (preset name from the GUI).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "APARSER_PROXY_CHECKERS",
+          "description": "Default proxy checker groups, comma-separated.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "APARSER_USE_PROXY",
+          "description": "Use proxies by default (true/false; default true).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
         }
       ]
     }

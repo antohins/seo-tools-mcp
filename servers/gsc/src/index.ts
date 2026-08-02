@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { chmodSync, writeFileSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 /**
- * gsc-mcp — Google Search Console (Search Analytics) для SEO-пайплайна.
+ * gsc-mcp — Google Search Console для SEO-пайплайна: Search Analytics (gsc_query),
+ * URL Inspection (gsc_inspect_url), сайтмапы (gsc_list_sitemaps/gsc_get_sitemap).
  * Авторизация (любой из двух путей):
  *  1) OAuth пользователя (gsc_oauth_start/finish) — токен видит ВСЕ свойства,
  *     доступные Google-аккаунту, добавлять пользователя в каждое свойство не нужно;
  *  2) service account (GSC_SA_JSON) — для headless-кронов; добавляется в каждое
  *     свойство вручную.
- * Питает: BASELINE 2.3, A.1 (морфо-кластеры), 2.5 (MAIN-KEYS).
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -22,16 +21,29 @@ import {
   fetchJson,
   getConfig,
   HttpError,
+  hasRealEnvOverride,
   jsonResult,
   loadSharedEnv,
   maskSecret,
   registerAuthTools,
   safeHandler,
   saveEnvValues,
+  validateAccount,
 } from '@seo-tools/shared';
 import { JWT } from 'google-auth-library';
 import { z } from 'zod';
-import { collectRows } from './paginate.js';
+import {
+  forbidden403Hint,
+  type GscRow,
+  isInvalidGrant,
+  mapKeysToDimensions,
+  resolveSite,
+  saJsonFileName,
+  saKeyErrorText,
+  validateDates,
+} from './logic.js';
+import { createLoopbackManager, type OauthFlow } from './loopback.js';
+import { collectRows, type TruncatedBy } from './paginate.js';
 
 loadSharedEnv();
 
@@ -41,23 +53,12 @@ const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const OAUTH_PORT = Number(process.env.GSC_OAUTH_PORT || 8585); // реальный env процесса — ок
 const REDIRECT_URI = `http://localhost:${OAUTH_PORT}`;
 
-/** Свойство GSC: явный аргумент или GSC_SITE_URL (с суффиксом профиля) из конфига. */
-function resolveSite(siteUrl?: string, account?: string): string {
-  const site = siteUrl || getConfig('GSC_SITE_URL', account);
-  if (!site) {
-    throw new Error(
-      `Не указано свойство GSC${account ? ` для аккаунта «${account}»` : ''}: передай siteUrl (например sc-domain:example.com) ` +
-        'или сохрани дефолт через gsc_set_credentials' +
-        (account ? ` (account="${account}")` : ' (GSC_SITE_URL)') +
-        '. Список доступных — gsc_list_sites.',
-    );
-  }
-  return site;
-}
-
 // кеши авторизации: ключ = имя аккаунта-профиля ('' = основной)
 const jwtClients = new Map<string, { keyFile: string; client: JWT }>();
 const cachedAccess = new Map<string, { token: string; exp: number }>();
+// in-flight refresh-промисы по аккаунтам: параллельные вызовы делят ОДИН обмен
+// refresh→access (по эталону shared/yandex-oauth.ts), не плодя запросы к Google
+const refreshInflight = new Map<string, Promise<string>>();
 
 function resetAuthCaches(): void {
   jwtClients.clear();
@@ -76,33 +77,45 @@ function googleClientCreds(account?: string): { clientId: string; clientSecret: 
   return { clientId, clientSecret };
 }
 
-async function getAccessToken(account?: string): Promise<string> {
+/** Обмен refresh→access у Google; кладёт результат в cachedAccess. */
+async function refreshAccessToken(account: string | undefined, refreshToken: string, cacheKey: string): Promise<string> {
+  const { clientId, clientSecret } = googleClientCreds(account);
+  const data = await fetchJson<{ access_token: string; expires_in?: number }>('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString(),
+  }).catch((err) => {
+    if (isInvalidGrant(err)) {
+      throw new Error(
+        'Google отверг refresh-токен (invalid_grant) — токен отозван или истёк (Testing-режим = 7 дней). Переавторизуйся: gsc_oauth_start → gsc_oauth_finish.',
+      );
+    }
+    throw err;
+  });
+  cachedAccess.set(cacheKey, { token: data.access_token, exp: Date.now() + (data.expires_in ?? 3600) * 1000 });
+  return data.access_token;
+}
+
+async function getAccessToken(account?: string): Promise<{ token: string; via: 'oauth' | 'sa' }> {
   const cacheKey = account ?? '';
   // Путь 1: OAuth пользователя (приоритетный — видит все свойства аккаунта)
   const refreshToken = getConfig('GSC_REFRESH_TOKEN', account);
   if (refreshToken) {
     const hit = cachedAccess.get(cacheKey);
-    if (hit && Date.now() < hit.exp - 60_000) return hit.token;
-    const { clientId, clientSecret } = googleClientCreds(account);
-    const data = await fetchJson<{ access_token: string; expires_in?: number }>('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: clientId,
-        client_secret: clientSecret,
-      }).toString(),
-    }).catch((err) => {
-      if (err instanceof HttpError && err.bodySnippet.includes('invalid_grant')) {
-        throw new Error(
-          'Google отверг refresh-токен (invalid_grant) — токен отозван или истёк (Testing-режим = 7 дней). Переавторизуйся: gsc_oauth_start → gsc_oauth_finish.',
-        );
-      }
-      throw err;
+    if (hit && Date.now() < hit.exp - 60_000) return { token: hit.token, via: 'oauth' };
+    // дедуп параллельных refresh: ждём общий промис, а не делаем второй обмен
+    const inflight = refreshInflight.get(cacheKey);
+    if (inflight) return { token: await inflight, via: 'oauth' };
+    const p = refreshAccessToken(account, refreshToken, cacheKey).finally(() => {
+      if (refreshInflight.get(cacheKey) === p) refreshInflight.delete(cacheKey);
     });
-    cachedAccess.set(cacheKey, { token: data.access_token, exp: Date.now() + (data.expires_in ?? 3600) * 1000 });
-    return data.access_token;
+    refreshInflight.set(cacheKey, p);
+    return { token: await p, via: 'oauth' };
   }
 
   // Путь 2: сервис-аккаунт
@@ -111,73 +124,58 @@ async function getAccessToken(account?: string): Promise<string> {
     throw new Error(
       `Нет авторизации GSC${account ? ` для аккаунта «${account}»` : ''}. ` +
         `Либо OAuth: gsc_oauth_start${account ? ` (account="${account}")` : ''} → ссылка → gsc_oauth_finish (токен видит все свойства аккаунта), ` +
-        'либо сервис-аккаунт: gsc_save_sa_json / gsc_set_credentials (GSC_SA_JSON) + добавить его email в каждое свойство.',
+        'либо сервис-аккаунт: gsc_save_sa_json / gsc_set_credentials (GSC_SA_JSON) + добавить его email в каждое свойство. ' +
+        'Текущий статус ключей и инструкция — gsc_auth_status.',
     );
   }
   const cached = jwtClients.get(cacheKey);
   let client = cached?.keyFile === keyFile ? cached.client : undefined;
   if (!client) {
-    client = new JWT({ keyFile, scopes: [SCOPE] });
+    try {
+      client = new JWT({ keyFile, scopes: [SCOPE] });
+    } catch (err) {
+      throw new Error(saKeyErrorText(keyFile, err));
+    }
     jwtClients.set(cacheKey, { keyFile, client });
   }
-  const { token } = await client.getAccessToken();
+  const { token } = await client.getAccessToken().catch((err: unknown) => {
+    jwtClients.delete(cacheKey); // следующий вызов пересоздаст клиент (например, после починки файла)
+    throw new Error(saKeyErrorText(keyFile, err)); // google-auth-library читает keyFile лениво — ENOENT всплывает здесь
+  });
   if (!token) throw new Error('Не удалось получить access token по сервис-аккаунту (GSC_SA_JSON)');
-  return token;
+  return { token, via: 'sa' };
 }
 
 // ── Loopback-приёмник кода OAuth: ловит редирект Google на localhost ──
 // Код привязан к конкретному flow (state + профиль) — чужой/устаревший код не подхватится.
-interface OauthFlow {
-  account: string | null;
-  state: string;
-  code: string | null;
-}
+// Менеджер (с перевзводом таймера авто-закрытия при переиспользовании listener) — в loopback.ts.
 let pendingFlow: OauthFlow | null = null;
-let loopback: Server | null = null;
+const { start: startLoopback, stop: stopLoopback } = createLoopbackManager({
+  port: OAUTH_PORT,
+  redirectUri: REDIRECT_URI,
+  getFlow: () => pendingFlow,
+});
 
-/** Поднимает приёмник; false — порт занят (EADDRINUSE приходит асинхронно, поэтому ждём listening/error). */
-function startLoopback(): Promise<boolean> {
-  if (loopback) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const srv = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', REDIRECT_URI);
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
-      const matches = Boolean(code) && Boolean(pendingFlow) && state === pendingFlow!.state;
-      if (matches) pendingFlow!.code = code;
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(
-        matches
-          ? '<h2>Код получен ✓</h2><p>Вернись в чат и вызови gsc_oauth_finish (код подхватится автоматически).</p>'
-          : '<h2>Код не принят</h2><p>Этот редирект не относится к текущей авторизации — повтори gsc_oauth_start и используй свежую ссылку.</p>',
-      );
-    });
-    srv.once('error', () => {
-      loopback = null;
-      resolve(false); // порт занят — сообщаем честно, oauth_start даст ручную инструкцию
-    });
-    srv.once('listening', () => {
-      loopback = srv;
-      setTimeout(() => stopLoopback(), 10 * 60_000).unref(); // авто-закрытие
-      resolve(true);
-    });
-    srv.listen(OAUTH_PORT, '127.0.0.1');
-  });
-}
-
-function stopLoopback(): void {
-  loopback?.close();
-  loopback = null;
-}
-
-/** fetch к Google API с авторизацией; при 401 сбрасывает кеш access-токена и повторяет один раз. */
-async function gscFetch<T>(url: string, init: { method?: 'GET' | 'POST'; body?: string; attempts?: number }, account?: string): Promise<T> {
+/**
+ * fetch к Google API с авторизацией.
+ * 401: повтор со свежим токеном — только для OAuth-пути (у сервис-аккаунта JWT кеширует
+ * токен сам, повтор с тем же ключом бессмысленен → сразу понятная ошибка).
+ * 403: классифицируется как «нет доступа к свойству» с подсказкой.
+ */
+async function gscFetch<T>(
+  url: string,
+  init: { method?: 'GET' | 'POST'; body?: string; attempts?: number },
+  account?: string,
+  siteContext?: string,
+): Promise<T> {
   const { attempts, ...rest } = init;
+  let via: 'oauth' | 'sa' | null = null; // какой путь авторизации сработал в exec (null — токен не получен)
   const exec = async () => {
-    const token = await getAccessToken(account);
+    const auth = await getAccessToken(account);
+    via = auth.via;
     return fetchJson<T>(url, {
       ...rest,
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
       timeoutMs: 120_000, // ceiling для «жирных» страниц (25k строк не влезают в 60с); быстрым вызовам безвреден
       ...(attempts !== undefined ? { attempts } : {}), // ретраи ограничиваем только там, где нужно (пагинация)
     });
@@ -186,49 +184,57 @@ async function gscFetch<T>(url: string, init: { method?: 'GET' | 'POST'; body?: 
     return await exec();
   } catch (err) {
     if (err instanceof HttpError && err.status === 401) {
+      if (via === 'sa') {
+        throw new Error(
+          'Google отклонил токен сервис-аккаунта (401) — ключ отозван или Search Console API не включён в проекте. ' +
+            'Проверь: gsc_auth_status; обновить ключ — gsc_save_sa_json.',
+        );
+      }
       cachedAccess.delete(account ?? ''); // токен отозван раньше expires_in — берём свежий
       return exec();
+    }
+    if (err instanceof HttpError && err.status === 403) {
+      throw new Error(forbidden403Hint(siteContext));
     }
     throw err;
   }
 }
 
-interface GscRow {
-  keys?: string[];
-  clicks: number;
-  impressions: number;
-  ctr: number;
-  position: number;
+interface QueryAllResult {
+  rows: GscRow[];
+  truncated: boolean;
+  truncatedBy?: TruncatedBy;
+  /** metadata.first_incomplete_date первого ответа (приходит при dataState=all): с какой даты данные ещё не финальные. */
+  firstIncompleteDate: string | null;
 }
 
-function queryAll(
-  siteUrl: string,
-  body: Record<string, unknown>,
-  limit: number,
-  account?: string,
-): Promise<{ rows: GscRow[]; truncated: boolean }> {
+async function queryAll(siteUrl: string, body: Record<string, unknown>, limit: number, account?: string): Promise<QueryAllResult> {
   const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+  let firstIncompleteDate: string | null = null;
   // логика пагинации — в collectRows (тестируется отдельно); здесь только реальный fetch страницы
-  return collectRows<GscRow>(
+  const { rows, truncated, truncatedBy } = await collectRows<GscRow>(
     async (rowLimit, startRow) => {
-      const page = await gscFetch<{ rows?: GscRow[] }>(
+      const page = await gscFetch<{ rows?: GscRow[]; metadata?: { first_incomplete_date?: string } }>(
         url,
         {
           method: 'POST',
           body: JSON.stringify({ ...body, rowLimit, startRow }),
-          attempts: 2, // длинный таймаут × 3 ретрая × 401-повтор × страницы иначе висит минутами
+          attempts: 2, // длинный таймаут × повтор × 401-ретрай × страницы иначе висит минутами
         },
         account,
+        siteUrl,
       );
+      if (startRow === 0) firstIncompleteDate = page.metadata?.first_incomplete_date ?? null;
       return page.rows ?? [];
     },
     limit,
     PAGE_SIZE,
     QUERY_DEADLINE_MS,
   );
+  return { rows, truncated, truncatedBy, firstIncompleteDate };
 }
 
-const server = new McpServer({ name: 'gsc', version: '1.0.0' });
+const server = new McpServer({ name: 'gsc', version: '1.3.0' });
 
 registerAuthTools(
   server,
@@ -260,7 +266,8 @@ server.registerTool(
     description:
       'Шаг 1 OAuth-авторизации Google: вернёт ссылку — пользователь открывает её под аккаунтом, у которого есть доступ к нужным свойствам GSC, ' +
       'и разрешает read-only доступ. Токен будет видеть ВСЕ свойства аккаунта (добавлять пользователя в каждое свойство не нужно). ' +
-      'Требуется OAuth client типа Desktop app (client ID + secret из console.cloud.google.com). ' +
+      'Требуется OAuth client типа Desktop app (client ID + secret из console.cloud.google.com); переданные clientId/clientSecret сохраняются ' +
+      '(при account — в профиль GOOGLE_CLIENT_*__<account>, базовые значения не перезаписываются). ' +
       'После согласия Google отправит браузер на localhost — код подхватится автоматически, затем вызвать gsc_oauth_finish.',
     inputSchema: {
       clientId: z.string().optional().describe('OAuth client ID (если не сохранён как GOOGLE_CLIENT_ID)'),
@@ -270,8 +277,8 @@ server.registerTool(
   },
   safeHandler(async (args) => {
     const values: Record<string, string> = {};
-    if (args.clientId) values.GOOGLE_CLIENT_ID = args.clientId.trim();
-    if (args.clientSecret) values.GOOGLE_CLIENT_SECRET = args.clientSecret.trim();
+    if (args.clientId) values[envKey('GOOGLE_CLIENT_ID', args.account)] = args.clientId.trim();
+    if (args.clientSecret) values[envKey('GOOGLE_CLIENT_SECRET', args.account)] = args.clientSecret.trim();
     if (Object.keys(values).length) saveEnvValues(values);
     const clientId = envOr('GOOGLE_CLIENT_ID', args.account);
     if (!clientId || !envOr('GOOGLE_CLIENT_SECRET', args.account)) {
@@ -305,6 +312,14 @@ server.registerTool(
           (args.account ? ` с account="${args.account}"` : ' без аргументов') +
           '.'
         : `Порт ${OAUTH_PORT} занят (другой процесс?): после согласия скопировать параметр code из адресной строки (localhost:${OAUTH_PORT}/?code=...) и передать в gsc_oauth_finish. Либо задать другой порт через GSC_OAUTH_PORT.`,
+      ...(Object.keys(values).length
+        ? {
+            credentialsSaved: Object.keys(values),
+            note: args.account
+              ? `clientId/clientSecret сохранены как ${Object.keys(values).join(', ')} (профиль «${args.account}») — базовые GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET не перезаписаны.`
+              : 'clientId/clientSecret сохранены в базовые GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.',
+          }
+        : {}),
     });
   }),
 );
@@ -353,13 +368,19 @@ server.registerTool(
     if (!data.refresh_token) {
       throw new Error('Google не вернул refresh_token (повтори gsc_oauth_start — там стоит prompt=consent — и согласись заново).');
     }
-    saveEnvValues({ [envKey('GSC_REFRESH_TOKEN', args.account)]: data.refresh_token });
+    const refreshEnvKey = envKey('GSC_REFRESH_TOKEN', args.account);
+    saveEnvValues({ [refreshEnvKey]: data.refresh_token });
     resetAuthCaches();
     return jsonResult({
       ok: true,
       account,
       refreshToken: maskSecret(data.refresh_token),
       note: 'Токен видит все свойства аккаунта. Если OAuth-приложение в статусе Testing — refresh живёт 7 дней (Publish app в consent screen решает). Проверка — gsc_list_sites.',
+      ...(hasRealEnvOverride('GSC_REFRESH_TOKEN', args.account)
+        ? {
+            warning: `Ключ ${refreshEnvKey} перекрыт реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.`,
+          }
+        : {}),
     });
   }),
 );
@@ -376,6 +397,7 @@ server.registerTool(
     },
   },
   safeHandler(async (args) => {
+    const account = validateAccount(args.account); // ПЕРВОЙ строкой: '../../tmp/x' — path traversal, отклоняем ДО любой записи файла
     let parsed: { client_email?: string; private_key?: string };
     try {
       parsed = JSON.parse(args.json);
@@ -385,16 +407,22 @@ server.registerTool(
     if (!parsed.client_email || !parsed.private_key) {
       throw new Error('JSON не похож на ключ сервис-аккаунта (нет client_email/private_key)');
     }
-    const file = join(CONFIG_DIR, args.account ? `gsc-sa__${args.account}.json` : 'gsc-sa.json');
+    const file = join(CONFIG_DIR, saJsonFileName(account));
     writeFileSync(file, args.json, { mode: 0o600 });
     chmodSync(file, 0o600);
-    saveEnvValues({ [envKey('GSC_SA_JSON', args.account)]: file });
+    const saEnvKey = envKey('GSC_SA_JSON', account);
+    saveEnvValues({ [saEnvKey]: file });
     resetAuthCaches();
     return jsonResult({
       ok: true,
       savedTo: file,
       serviceAccountEmail: parsed.client_email,
       next: 'Добавь этот email в GSC → Настройки → Пользователи и права (права «Полный»), затем проверь gsc_list_sites.',
+      ...(hasRealEnvOverride('GSC_SA_JSON', account)
+        ? {
+            warning: `Ключ ${saEnvKey} перекрыт реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.`,
+          }
+        : {}),
     });
   }),
 );
@@ -404,11 +432,17 @@ server.registerTool(
   {
     description:
       'Search Analytics по свойству GSC (по умолчанию GSC_SITE_URL из конфига). ' +
-      'Возвращает строки {query|page|device..., clicks, impressions, ctr, position}. ' +
-      'Пагинация собирается автоматически до rowLimit; ответ несёт truncated=true, если упёрлись в rowLimit (данные могли остаться). ' +
+      'Возвращает строки {query|page|device..., clicks, impressions, ctr, position} (ctr — доля 0..1). ' +
+      'Даты — в часовом поясе GSC (Pacific Time, НЕ МСК); история ~16 месяцев; финальные данные отстают на ~2-3 дня ' +
+      '(свежие — через dataState=all, тогда в ответе firstIncompleteDate — с какой даты данные ещё не финальные). ' +
+      'Пагинация собирается автоматически до rowLimit; truncated=true — данные могли остаться ' +
+      '(truncatedBy: limit — упёрлись в rowLimit, deadline — общий дедлайн пагинации 5 мин). ' +
       'page — точный URL страницы для фильтра (опционально); dimensions — например ["query"], ["query","device"], ["page"].',
     inputSchema: {
-      siteUrl: z.string().optional().describe('Свойство GSC, например sc-domain:example.com (по умолчанию GSC_SITE_URL из конфига)'),
+      siteUrl: z
+        .string()
+        .optional()
+        .describe('Свойство GSC, например sc-domain:example.com (по умолчанию GSC_SITE_URL из конфига); для URL-prefix — с завершающим /'),
       page: z.string().optional().describe('Точный URL страницы для фильтра, например https://example.com/page/'),
       startDate: z
         .string()
@@ -429,6 +463,7 @@ server.registerTool(
     },
   },
   safeHandler(async (args) => {
+    validateDates(args.startDate, args.endDate);
     const siteUrl = resolveSite(args.siteUrl, args.account);
     const body: Record<string, unknown> = {
       startDate: args.startDate,
@@ -440,21 +475,12 @@ server.registerTool(
     if (args.page) {
       body.dimensionFilterGroups = [{ filters: [{ dimension: 'page', operator: 'equals', expression: args.page }] }];
     }
-    const { rows: raw, truncated } = await queryAll(siteUrl, body, args.rowLimit, args.account);
-    const rows = raw.map((r) => {
-      const out: Record<string, unknown> = {
-        clicks: r.clicks,
-        impressions: r.impressions,
-        ctr: r.ctr,
-        position: r.position,
-      };
-      (r.keys ?? []).forEach((key, i) => {
-        out[args.dimensions[i] ?? `key${i}`] = key;
-      });
-      return out;
-    });
+    const { rows: raw, truncated, truncatedBy, firstIncompleteDate } = await queryAll(siteUrl, body, args.rowLimit, args.account);
+    const rows = raw.map((r) => mapKeysToDimensions(r, args.dimensions));
     console.error(
-      `[gsc] ${siteUrl} ${args.startDate}..${args.endDate} dims=${args.dimensions.join(',')} → ${rows.length} строк${truncated ? ' (обрезано по rowLimit)' : ''}`,
+      `[gsc] ${siteUrl} ${args.startDate}..${args.endDate} dims=${args.dimensions.join(',')} → ${rows.length} строк${
+        truncated ? (truncatedBy === 'deadline' ? ' (обрезано по времени — дедлайн 5 мин)' : ' (обрезано по rowLimit)') : ''
+      }`,
     );
     return jsonResult({
       siteUrl,
@@ -463,6 +489,8 @@ server.registerTool(
       dimensions: args.dimensions,
       rowCount: rows.length,
       truncated,
+      truncatedBy: truncatedBy ?? null,
+      ...(args.dataState === 'all' ? { firstIncompleteDate } : {}),
       rows,
     });
   }),
@@ -491,7 +519,7 @@ server.registerTool(
   {
     description: 'Уровень доступа авторизации к конкретному свойству GSC (permissionLevel).',
     inputSchema: {
-      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL)'),
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL); для URL-prefix — с завершающим /'),
       account: accountParam,
     },
   },
@@ -501,6 +529,7 @@ server.registerTool(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`,
       {},
       args.account,
+      siteUrl,
     );
     return jsonResult(data);
   }),
@@ -512,7 +541,8 @@ server.registerTool(
     description:
       'URL Inspection: индекс-статус конкретного URL в Google — verdict, coverageState, indexingState, ' +
       'robotsTxtState, время последнего обхода, canonical (Google vs заявленный), crawledAs, ссылки-источники, ' +
-      'а также mobile usability и rich results. URL должен быть под указанным свойством GSC.',
+      'а также mobile usability и rich results. URL должен быть под указанным свойством GSC. ' +
+      'Квота — порядка 2000 вызовов в день на свойство: не дёргать массово.',
     inputSchema: {
       url: z.string().describe('Полный URL для инспекции, например https://example.com/page/'),
       siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL); для URL-prefix — с завершающим /'),
@@ -526,6 +556,7 @@ server.registerTool(
       'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',
       { method: 'POST', body: JSON.stringify({ inspectionUrl: args.url, siteUrl, languageCode: args.languageCode }) },
       args.account,
+      siteUrl,
     );
     const r = data.inspectionResult ?? {};
     const idx = r.indexStatusResult ?? {};
@@ -562,7 +593,7 @@ server.registerTool(
       'Список сайтмапов свойства GSC со статусом (path, отправлен/скачан, ошибки/предупреждения, содержимое по типам). ' +
       'sitemapIndex — опционально: перечислить сайтмапы внутри конкретного sitemap-индекса.',
     inputSchema: {
-      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL)'),
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL); для URL-prefix — с завершающим /'),
       sitemapIndex: z.string().optional().describe('URL sitemap-индекса — вернуть вложенные в него сайтмапы'),
       account: accountParam,
     },
@@ -571,7 +602,7 @@ server.registerTool(
     const siteUrl = resolveSite(args.siteUrl, args.account);
     let url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`;
     if (args.sitemapIndex) url += `?sitemapIndex=${encodeURIComponent(args.sitemapIndex)}`;
-    const data = await gscFetch<{ sitemap?: unknown[] }>(url, {}, args.account);
+    const data = await gscFetch<{ sitemap?: unknown[] }>(url, {}, args.account, siteUrl);
     return jsonResult({ siteUrl, count: (data.sitemap ?? []).length, sitemaps: data.sitemap ?? [] });
   }),
 );
@@ -582,14 +613,14 @@ server.registerTool(
     description: 'Детали одного сайтмапа свойства GSC (статус, ошибки/предупреждения, последний обход, содержимое по типам).',
     inputSchema: {
       feedpath: z.string().describe('Полный URL сайтмапа, например https://example.com/sitemap.xml'),
-      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL)'),
+      siteUrl: z.string().optional().describe('Свойство GSC (по умолчанию GSC_SITE_URL); для URL-prefix — с завершающим /'),
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
     const siteUrl = resolveSite(args.siteUrl, args.account);
     const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(args.feedpath)}`;
-    const data = await gscFetch<Record<string, unknown>>(url, {}, args.account);
+    const data = await gscFetch<Record<string, unknown>>(url, {}, args.account, siteUrl);
     return jsonResult({ siteUrl, sitemap: data });
   }),
 );

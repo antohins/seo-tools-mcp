@@ -9,7 +9,7 @@
 
 [Русский](README.md) | **English**
 
-Six **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Yandex.Webmaster and Yandex.Metrica straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, Webmaster host, Metrica counter) are configured on the fly.
+Seven **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Yandex.Webmaster, Yandex.Metrica and self-hosted A-Parser straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, Webmaster host, Metrica counter) are configured on the fly.
 
 > 🛰 We use these servers in production at **[PBN Workers](https://pbn-workers.com/tools/seo-tools-mcp/)** — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. Need steady organic traffic? [Get in touch](https://pbn-workers.com/tools/seo-tools-mcp/).
 
@@ -21,6 +21,7 @@ Six **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Goo
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (auto-refresh) |
+| `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (API URL + password) |
 
 > **Regional focus:** XMLStock covers both Google and Yandex SERP, while Wordstat, Webmaster and Metrica are Yandex services — this toolkit is most useful for SEO on the Russian/CIS market (though GSC and the Google side of XMLStock are global).
 
@@ -42,7 +43,7 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 > Wordstat via XMLStock uses the same `XMLSTOCK_*` key as SERP — **no Yandex Cloud setup** needed (unlike the standalone `wordstat` server).
 
 ### xmlriver — Google/Yandex SERP + indexation check
-- `xmlriver_serp` — Google/Yandex organic SERP, depth in one request (groupby up to 100), AI-Overview presence flag
+- `xmlriver_serp` — Google/Yandex organic SERP (depth collected by pagination: every 10 positions = 1 paid request), AI-Overview presence flag
 - `xmlriver_images` — Google image search (page url + image url + title + source + dimensions)
 - `xmlriver_news` — Google news (title, source, date, snippet), time filter
 - `xmlriver_check_index` — check whether a URL is indexed in Google/Yandex (`inindex`)
@@ -62,10 +63,12 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `gsc_list_sitemaps` — submitted sitemaps with status
 - `gsc_get_sitemap` — details for one sitemap
 
+Search Analytics dates are in Pacific Time (not MSK); history is ~16 months; final data lags by ~2-3 days (fresh data via `dataState=all`); `ctr` in the response is a 0..1 fraction.
+
 ### ywm — Yandex.Webmaster
 - `ywm_hosts` — user id + verified sites
 - `ywm_summary` — SQI, pages in search, excluded, site problems by severity
-- `ywm_search_queries` — query analytics for a URL (~2 weeks)
+- `ywm_search_queries` — query analytics for a URL (~2 weeks by default; override with dateFrom/dateTo)
 - `ywm_queries_history` — total shows/clicks/positions over time
 - `ywm_recommended_queries` — approximated recommended queries (demand + click shortfall)
 - `ywm_popular` — popular queries of the host
@@ -89,6 +92,21 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `metrika_search_phrases` — organic search phrases
 - `metrika_top_landings` — top organic landing pages
 
+### aparser — bridge to a self-hosted A-Parser
+- `aparser_ping` — instance connectivity + API password check
+- `aparser_status` — readiness verdict: version, installed parsers, queue, live proxies
+- `aparser_proxies` — live proxies on the instance (filterable by proxy-checker packs; proxy credentials never shown)
+- `aparser_parsers` — parsers installed on the instance
+- `aparser_parser_fields` — result fields a parser can return (flat + arrays)
+- `aparser_get_preset` — read a config preset's options (sensitive values are masked)
+- `aparser_serp_google` — Google organic SERP (`SE::Google`); proxies on by default + live-proxy preflight
+- `aparser_serp_yandex` — Yandex organic SERP (`SE::Yandex`); region via `lr`
+- `aparser_suggest` — Google/Yandex search suggestions
+- `aparser_request` — universal synchronous request to any parser (`oneRequest`)
+- `aparser_bulk_request` — bulk request: one parser, many queries, N threads (`bulkRequest`)
+
+> You need your **own** running [A-Parser](https://a-parser.com) instance (licence + server): the bridge drives it but does not host or proxy it for you. Proxies and proxy checkers (packs) are configured once in the A-Parser GUI — the bridge reads, verifies (preflight) and selects them (`checkers`), but does not create them. v1 is synchronous and read-only: the task queue and large async exports are not wired up.
+
 ## Quick start
 
 ### Option A — via npx (no cloning)
@@ -102,6 +120,7 @@ claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
 claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
 claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
 claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
+claude mcp add aparser  --scope user -- npx -y seo-tools-mcp-aparser
 ```
 
 #### Need just one server?
@@ -116,6 +135,7 @@ The servers are **independent**: take a single package and ignore the rest. Each
 | [`seo-tools-mcp-gsc`](https://www.npmjs.com/package/seo-tools-mcp-gsc) | Google Search Console |
 | [`seo-tools-mcp-ywm`](https://www.npmjs.com/package/seo-tools-mcp-ywm) | Yandex.Webmaster |
 | [`seo-tools-mcp-metrika`](https://www.npmjs.com/package/seo-tools-mcp-metrika) | Yandex.Metrica |
+| [`seo-tools-mcp-aparser`](https://www.npmjs.com/package/seo-tools-mcp-aparser) | bridge to a self-hosted A-Parser |
 
 ```bash
 # add a single server to Claude Code
@@ -147,7 +167,7 @@ In any MCP client (Claude Desktop, Cursor…) it's a single block in `mcpServers
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
 ROOT=$(pwd)
-for s in xmlstock xmlriver wordstat gsc ywm metrika; do
+for s in xmlstock xmlriver wordstat gsc ywm metrika aparser; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```
@@ -258,9 +278,18 @@ If both are set — OAuth wins.
 
 Yandex API limitations (not server bugs): URL filtering in Webmaster exists only in query-analytics (data ~2 weeks); there is no "recommended queries" endpoint in API v4 — `ywm_recommended_queries` approximates via demand (DEMAND) + click shortfall; search phrases in Metrica are mostly "Not defined" (encrypted).
 
+### A-Parser (self-hosted) — SERP and hundreds of parsers via your own box
+
+1. Your own running [A-Parser](https://a-parser.com) instance (licence + server) — the bridge drives it but does not host or proxy it.
+2. In A-Parser: **Settings → API** — enable the API server, note the port (usually 9091) and the password.
+3. `APARSER_URL` = `http://<instance-IP>:<port>/API` (the `/API` path is required), `APARSER_PASSWORD` = the same password → `aparser_set_credentials`.
+4. Check: `aparser_ping`, then `aparser_status` (instance readiness + live proxies).
+
+Notes: proxies and proxy checkers (packs) are configured once in the GUI — without live proxies Google/Yandex ban quickly, so the serp/suggest tools run a preflight and warn (`use_proxy=false` is at your own risk); default presets and packs can be set via env (`APARSER_GOOGLE_PRESET`, `APARSER_YANDEX_PRESET`, `APARSER_PROXY_CHECKERS`, `APARSER_USE_PROXY`); v1 is synchronous and read-only — the task queue and mutating API methods are not wired up.
+
 ## Date format and regions
 
-Dates — `YYYY-MM-DD` (MSK). Regions (in `xmlstock_serp`, Wordstat, etc.): a name from the built-in list of common regions ("Москва", "спб", "Казахстан"…), several comma-separated, **or** a numeric Yandex region ID (`213`, `225`…) — a numeric ID always works. Full ID directory — the `wordstat_regions_tree` tool.
+Dates — `YYYY-MM-DD` (MSK). Regions: a name from the built-in list of common regions ("Москва", "спб", "Казахстан"…) **or** a numeric Yandex region ID (`213`, `225`…) — a numeric ID always works. Comma-separated region lists are supported only by the `wordstat` server; the `xmlstock_*`/`xmlriver_*` SERP tools take ONE region. Full ID directory — the `wordstat_regions_tree` tool.
 
 ## Where and how to use it
 
@@ -328,7 +357,7 @@ pnpm test:live    # live smoke against real APIs (needs creds in config; free en
 node servers/xmlstock/dist/index.js   # manual run (stdio)
 ```
 
-Unit tests cover pure logic: secret masking, OAuth error classification, Metrica/GSC pagination (dedup, `truncated`), filters, the SERP parser, regions. The live smoke boots each server and calls a free tool (`xmlstock_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`) — an end-to-end auth check.
+Unit tests cover pure logic: secret masking, OAuth error classification, Metrica/GSC pagination (dedup, `truncated`), filters, the SERP parser, regions. The live smoke boots each server and calls a free tool (`xmlstock_balance`, `xmlriver_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`, `aparser_ping`) — an end-to-end auth check.
 
 Shared code (`shared/`): an HTTP client with retries on 429/5xx (3 attempts, exponential backoff, Retry-After), an env loader + persistent config, an auth-tools factory, Yandex OAuth with auto-refresh, MCP JSON helpers, a paid-call cost counter. XMLStock additionally retries its own "temporary" codes from the XML body; code 15 ("nothing found") is treated as an empty SERP.
 

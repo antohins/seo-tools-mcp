@@ -5,7 +5,7 @@
  * res.text()) — зависший/капающий стрим тела обрывается, а не висит вечно.
  */
 
-import { maskUrl } from './config.js';
+import { maskSecretsInText, maskUrl } from './config.js';
 
 export interface FetchRetryOptions {
   method?: 'GET' | 'POST';
@@ -21,6 +21,9 @@ export interface FetchRetryOptions {
   retryOn?: (status: number) => boolean;
 }
 
+/** Лимит хранимого фрагмента тела ошибки: мегабайтные 502 в память не тащим. */
+export const BODY_SNIPPET_LIMIT = 2000;
+
 export class HttpError extends Error {
   /** URL с замаскированными секретами — безопасен для логов (в т.ч. в .message). */
   public url: string;
@@ -29,17 +32,24 @@ export class HttpError extends Error {
   constructor(
     public status: number,
     url: string,
+    /** Фрагмент тела ответа: обрезан до BODY_SNIPPET_LIMIT, секретные параметры замаскированы. */
     public bodySnippet: string,
   ) {
     const safe = maskUrl(url);
-    super(`HTTP ${status} for ${safe}: ${bodySnippet.slice(0, 300)}`);
+    // тело обрезаем и маскируем «ключ=значение»: API может эхом вернуть query с секретом
+    const snippet = maskSecretsInText(bodySnippet.slice(0, BODY_SNIPPET_LIMIT));
+    super(`HTTP ${status} for ${safe}: ${snippet.slice(0, 300)}`);
     this.name = 'HttpError';
     this.url = safe;
     this.rawUrl = url;
+    this.bodySnippet = snippet;
   }
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Потолок ожидания по Retry-After: враждебный/кривой «Retry-After: 3600» не должен усыплять вызов на час. */
+export const MAX_RETRY_AFTER_MS = 60_000;
 
 interface AttemptResult {
   status: number;
@@ -89,7 +99,14 @@ export async function fetchText(url: string, opts: FetchRetryOptions = {}): Prom
       // сюда попадают только сетевые сбои и таймауты — HTTP-статусы обрабатываются ниже
       const isAbort = err instanceof Error && err.name === 'AbortError';
       const isNetwork = err instanceof TypeError; // fetch network failure
-      if (!(isAbort || isNetwork) || attempt === attempts) throw err;
+      if (!(isAbort || isNetwork)) throw err;
+      if (attempt === attempts) {
+        // Финальная ошибка — с контекстом: иначе наружу летит голое «This operation was aborted»
+        // или «fetch failed» без URL/таймаута, и по логам не понять, какой вызов умер.
+        const kind = isAbort ? `таймаут ${timeoutMs} мс` : 'сетевая ошибка';
+        const cause = err instanceof Error ? err.message : String(err);
+        throw new Error(`fetchText: ${kind} для ${maskUrl(url)} после ${attempts} попыток: ${cause}`);
+      }
       const delay = backoffWithJitter(backoffMs, attempt);
       console.error(`[http] ${isAbort ? 'timeout' : 'network error'} ${maskUrl(url)} — retry ${attempt}/${attempts - 1} in ${delay}ms`);
       await sleep(delay);
@@ -99,8 +116,8 @@ export async function fetchText(url: string, opts: FetchRetryOptions = {}): Prom
     if (res.ok) return res.text;
     if (!isRetriable(res.status) || attempt === attempts) throw new HttpError(res.status, url, res.text);
 
-    // Retry-After (если сервер прислал) уважаем точно; иначе — jitter-backoff
-    const delay = res.retryAfterMs ?? backoffWithJitter(backoffMs, attempt);
+    // Retry-After (если сервер прислал) уважаем, но не выше потолка; иначе — jitter-backoff
+    const delay = res.retryAfterMs !== null ? Math.min(res.retryAfterMs, MAX_RETRY_AFTER_MS) : backoffWithJitter(backoffMs, attempt);
     console.error(`[http] ${res.status} ${maskUrl(url)} — retry ${attempt}/${attempts - 1} in ${delay}ms`);
     await sleep(delay);
   }

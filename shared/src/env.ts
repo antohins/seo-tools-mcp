@@ -26,7 +26,8 @@ export function requireEnv(name: string, account?: string): string {
     throw new Error(
       `Не задана переменная окружения ${envKey(name, account)}.` +
         (account ? ` Настроенные аккаунты для ${name}: ${known.length ? known.join(', ') : 'ни одного'}.` : '') +
-        ` Сохрани через <server>_set_credentials${account ? ` с account="${account}"` : ''} или в env-файл конфига.`,
+        ` Сохрани через set_credentials-инструмент соответствующего сервера${account ? ` с account="${account}"` : ''} ` +
+        'или в env-файл конфига.',
     );
   }
   return value;

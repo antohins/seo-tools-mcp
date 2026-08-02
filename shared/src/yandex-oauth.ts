@@ -7,8 +7,11 @@
  * Env: YANDEX_CLIENT_ID, YANDEX_CLIENT_SECRET (общие для всех аккаунтов — одно приложение),
  * YANDEX_OAUTH_TOKEN, YANDEX_REFRESH_TOKEN (+ __<account> для мультиаккаунта).
  * Специфичные YWM_OAUTH_TOKEN / METRIKA_OAUTH_TOKEN (если заданы) имеют приоритет —
- * для случая раздельных приложений; авто-refresh на них НЕ распространяется
- * (общий refresh-токен принадлежит другому приложению/scope — подменять нельзя).
+ * для случая раздельных приложений; авто-refresh на ЧУЖОЙ специфичный токен не
+ * распространяется (общий refresh-токен принадлежит другому приложению/scope —
+ * подменять нельзя). Если же специфичный токен совпадает с общим (та же строка
+ * в обоих ключах), refresh переписывает ОБА — иначе после ротации specific !==
+ * general и следующий 401 принял бы его за чужой (баг «инверсии usedSpecificForeign»).
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -20,6 +23,13 @@ import { jsonResult, safeHandler } from './mcp.js';
 
 const TOKEN_URL = 'https://oauth.yandex.ru/token';
 
+/**
+ * Имя инструмента с префиксом вызывающего сервера (ywm/metrika); без префикса —
+ * нейтральная формулировка (никаких плейсхолдеров вида <server> в текстах пользователю).
+ */
+const toolName = (prefix: string | undefined, base: string): string =>
+  prefix ? `${prefix}_${base}` : `${base} с префиксом вашего сервера (ywm_…/metrika_…)`;
+
 function readTokens(specificEnv: string, account?: string): { specific?: string; general?: string } {
   return {
     specific: getConfig(specificEnv, account),
@@ -27,7 +37,7 @@ function readTokens(specificEnv: string, account?: string): { specific?: string;
   };
 }
 
-export function getYandexToken(specificEnv: string, account?: string): string {
+export function getYandexToken(specificEnv: string, account?: string, prefix?: string): string {
   let { specific, general } = readTokens(specificEnv, account);
   if (!specific && !general) {
     readConfigFile(true); // страховка от записи в ту же миллисекунду
@@ -40,7 +50,8 @@ export function getYandexToken(specificEnv: string, account?: string): string {
       `Нет OAuth-токена Яндекса${account ? ` для аккаунта «${account}»` : ''} ` +
         `(${envKey(specificEnv, account)} или ${envKey('YANDEX_OAUTH_TOKEN', account)}). ` +
         (known.length ? `Настроенные аккаунты: ${known.join(', ')}. ` : '') +
-        `Запусти <server>_oauth_start${account ? ` c account="${account}"` : ''} или сохрани готовый токен через <server>_set_credentials.`,
+        `Запусти ${toolName(prefix, 'oauth_start')}${account ? ` c account="${account}"` : ''} ` +
+        `или сохрани готовый токен через ${toolName(prefix, 'set_credentials')}.`,
     );
   }
   return token;
@@ -77,17 +88,21 @@ export function isDeadGrant(err: unknown): boolean {
   return false; // AbortError (timeout) / TypeError (сеть) — транзиент
 }
 
+/** Исход попытки refresh: токен | грант мёртв (переавторизация) | обновлять нечем. */
+type RefreshOutcome = { kind: 'token'; token: string } | { kind: 'dead' } | { kind: 'unavailable' };
+
 /**
  * Обновляет ОБЩИЙ токен по refresh-токену.
- * Возвращает null — если обновлять нечем ИЛИ грант мёртв (→ переавторизация).
+ * syncSpecificEnv — имя специфичного ключа (YWM_/METRIKA_OAUTH_TOKEN), чьё значение ДО
+ * refresh совпадало с общим: такой ключ переписывается вместе с общим (см. шапку файла).
  * Бросает — при транзиентной ошибке (5xx/timeout): refresh-токен жив, повтор позже.
  */
-async function tryRefresh(account?: string): Promise<string | null> {
+async function doRefresh(account: string | undefined, syncSpecificEnv?: string): Promise<RefreshOutcome> {
   const refreshToken = getConfig('YANDEX_REFRESH_TOKEN', account);
   // OAuth-приложение общее для всех аккаунтов → client id/secret с мягким фолбэком на основной
   const clientId = envOr('YANDEX_CLIENT_ID', account);
   const clientSecret = envOr('YANDEX_CLIENT_SECRET', account);
-  if (!refreshToken || !clientId || !clientSecret) return null;
+  if (!refreshToken || !clientId || !clientSecret) return { kind: 'unavailable' };
   try {
     const data = await exchangeToken({
       grant_type: 'refresh_token',
@@ -96,16 +111,17 @@ async function tryRefresh(account?: string): Promise<string | null> {
       client_secret: clientSecret,
     });
     const values: Record<string, string> = { [envKey('YANDEX_OAUTH_TOKEN', account)]: data.access_token };
+    if (syncSpecificEnv) values[envKey(syncSpecificEnv, account)] = data.access_token;
     // refresh пишем только при фактической ротации — лишняя запись конфига дёргает файл зря
     if (data.refresh_token && data.refresh_token !== refreshToken) values[envKey('YANDEX_REFRESH_TOKEN', account)] = data.refresh_token;
     if (data.expires_in) values[envKey('YANDEX_TOKEN_EXPIRES', account)] = new Date(Date.now() + data.expires_in * 1000).toISOString();
     saveEnvValues(values);
     console.error(`[yandex-oauth] токен${account ? ` аккаунта «${account}»` : ''} обновлён по refresh-токену`);
-    return data.access_token;
+    return { kind: 'token', token: data.access_token };
   } catch (err) {
     if (isDeadGrant(err)) {
       console.error(`[yandex-oauth] refresh отклонён (грант мёртв, нужна переавторизация): ${String(err)}`);
-      return null;
+      return { kind: 'dead' };
     }
     // Транзиент (5xx/timeout/сеть/408/429): refresh-токен НЕ протух — не гоним на переавторизацию,
     // пробрасываем понятную временную ошибку, чтобы вызов можно было повторить позже.
@@ -117,18 +133,37 @@ async function tryRefresh(account?: string): Promise<string | null> {
   }
 }
 
+// In-flight refresh-промисы по аккаунтам: Яндекс ротирует refresh-токен при каждом обмене,
+// поэтому два ПАРАЛЛЕЛЬНЫХ обмена одним токеном дают второму invalid_grant («грант мёртв»)
+// и ложную переавторизацию. Параллельные вызовы ждут один и тот же промис
+// (syncSpecificEnv берётся от первого вызова — остальные разделяют его исход).
+const refreshInflight = new Map<string, Promise<RefreshOutcome>>();
+
+/** tryRefresh с дедупликацией параллельных вызовов (per account). */
+function tryRefresh(account: string | undefined, syncSpecificEnv?: string): Promise<RefreshOutcome> {
+  const key = account ?? '';
+  const existing = refreshInflight.get(key);
+  if (existing) return existing;
+  const p = doRefresh(account, syncSpecificEnv).finally(() => {
+    if (refreshInflight.get(key) === p) refreshInflight.delete(key);
+  });
+  refreshInflight.set(key, p);
+  return p;
+}
+
 /** fetchJson к API Яндекса с OAuth-заголовком и авто-рефрешем при 401. */
 export async function yandexFetchJson<T = any>(
   specificTokenEnv: string,
   url: string,
   opts: FetchRetryOptions = {},
   account?: string,
+  prefix?: string,
 ): Promise<T> {
   const exec = (token: string) => fetchJson<T>(url, { ...opts, headers: { ...(opts.headers ?? {}), Authorization: `OAuth ${token}` } });
 
   const { specific, general } = readTokens(specificTokenEnv, account);
   try {
-    return await exec(getYandexToken(specificTokenEnv, account));
+    return await exec(getYandexToken(specificTokenEnv, account, prefix));
   } catch (err) {
     if (!(err instanceof HttpError && err.status === 401)) throw err;
 
@@ -138,28 +173,37 @@ export async function yandexFetchJson<T = any>(
     if (usedSpecificForeign) {
       throw new Error(
         `Токен ${envKey(specificTokenEnv, account)} протух. Авто-refresh для отдельного токена не выполняется ` +
-          '(общий YANDEX_REFRESH_TOKEN может принадлежать другому приложению) — обнови его через <server>_set_credentials ' +
-          'или перейди на общий токен: <server>_oauth_start → <server>_oauth_finish.',
+          `(общий YANDEX_REFRESH_TOKEN может принадлежать другому приложению) — обнови его через ${toolName(prefix, 'set_credentials')} ` +
+          `или перейди на общий токен: ${toolName(prefix, 'oauth_start')} → ${toolName(prefix, 'oauth_finish')}.`,
       );
     }
-    const fresh = await tryRefresh(account);
-    if (fresh) {
+    // specific === general (та же строка в обоих ключах) → refresh перепишет и специфичный ключ
+    const syncSpecificEnv = specific && specific === general ? specificTokenEnv : undefined;
+    const outcome = await tryRefresh(account, syncSpecificEnv);
+    if (outcome.kind === 'token') {
       try {
-        return await exec(fresh);
+        return await exec(outcome.token);
       } catch (err2) {
         // Свежий токен снова 401 → доступ приложения, вероятно, отозван; не крутим бесконечно
         if (err2 instanceof HttpError && err2.status === 401) {
           throw new Error(
             `OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} отклонён (401) даже после обновления по refresh — ` +
-              'вероятно, доступ приложения отозван. Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
+              `вероятно, доступ приложения отозван. Переавторизуйся: ${toolName(prefix, 'oauth_start')} → ${toolName(prefix, 'oauth_finish')}.`,
           );
         }
         throw err2;
       }
     }
+    if (outcome.kind === 'dead') {
+      // refresh-токен БЫЛ, но Яндекс его отклонил — не путать с «refresh-токена нет»
+      throw new Error(
+        `Яндекс отклонил refresh-токен${account ? ` аккаунта «${account}»` : ''}: грант отозван или протух. ` +
+          `Переавторизуйся: ${toolName(prefix, 'oauth_start')} → ${toolName(prefix, 'oauth_finish')}.`,
+      );
+    }
     throw new Error(
       `OAuth-токен Яндекса${account ? ` аккаунта «${account}»` : ''} протух, а refresh-токена/клиента для обновления нет. ` +
-        'Переавторизуйся: <server>_oauth_start → <server>_oauth_finish.',
+        `Переавторизуйся: ${toolName(prefix, 'oauth_start')} → ${toolName(prefix, 'oauth_finish')}.`,
     );
   }
 }

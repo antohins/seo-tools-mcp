@@ -31,6 +31,20 @@
           "format": "string",
           "isRequired": false,
           "isSecret": true
+        },
+        {
+          "name": "XMLRIVER_EXCLUDE_DOMAINS",
+          "description": "Aggregator domains excluded by excludeAggregators, comma-separated.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "XMLRIVER_PRICE_PER_CALL",
+          "description": "Price per SERP call in RUB for cost logging (default 0.02).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
         }
       ]
     }

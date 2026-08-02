@@ -6,145 +6,33 @@
  * Хост по умолчанию — YWM_HOST_ID из конфига (ywm_set_credentials), список — ywm_hosts.
  * Питает: BASELINE (Яндекс-сторона), A.5.
  *
- * Важно: фильтр по URL существует ТОЛЬКО в query-analytics/list (данные ~2 недели);
+ * Важно: фильтр по URL существует ТОЛЬКО в query-analytics/list (данные ~2 недели по умолчанию);
  * эндпоинта «рекомендованные запросы» в API v4 НЕТ — ywm_recommended_queries
  * аппроксимирует его через метрику DEMAND (спрос) + недобор кликов/позиций.
+ * Чистая логика (HTTP-слой, пагинация, агрегация, даты, фильтры) — в queries.ts.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  accountParam,
-  getConfig,
-  jsonResult,
-  loadSharedEnv,
-  registerAuthTools,
-  registerYandexOauthTools,
-  safeHandler,
-  yandexFetchJson,
-} from '@seo-tools/shared';
+import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, registerYandexOauthTools, safeHandler } from '@seo-tools/shared';
 import { z } from 'zod';
+import {
+  clearUserIdCache,
+  dateRange,
+  fetchPopular,
+  filterRecommended,
+  getUserId,
+  queryAnalytics,
+  resolveHost,
+  SORT_FETCH_CAP,
+  sortQueries,
+  toQueryRow,
+  validateOptionalDateOrder,
+  ywmGet,
+} from './queries.js';
 
 loadSharedEnv();
 
-const BASE = 'https://api.webmaster.yandex.net/v4';
-const TOKEN_ENV = 'YWM_OAUTH_TOKEN';
-
-function ywmGet<T = any>(path: string, account?: string): Promise<T> {
-  return yandexFetchJson<T>(TOKEN_ENV, `${BASE}${path}`, {}, account);
-}
-
-function ywmPost<T = any>(path: string, body: unknown, account?: string): Promise<T> {
-  return yandexFetchJson<T>(
-    TOKEN_ENV,
-    `${BASE}${path}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
-    account,
-  );
-}
-
-// сколько строк максимум тянем для честной сортировки топа (6 API-страниц по 500)
-const SORT_FETCH_CAP = 3000;
-
-/** Хост: явный аргумент или YWM_HOST_ID (с суффиксом профиля) из конфига. */
-function resolveHost(hostId?: string, account?: string): string {
-  const host = hostId || getConfig('YWM_HOST_ID', account);
-  if (!host) {
-    throw new Error(
-      `Не указан хост Вебмастера${account ? ` для аккаунта «${account}»` : ''}: передай hostId (формат https:example.com:443) ` +
-        'или сохрани дефолт через ywm_set_credentials' +
-        (account ? ` (account="${account}")` : ' (YWM_HOST_ID)') +
-        '. Список хостов — ywm_hosts.',
-    );
-  }
-  return host;
-}
-
-const cachedUsers = new Map<string, string>(); // account ?? '' → user_id (переживает refresh токена)
-async function getUserId(account?: string): Promise<string> {
-  const pinned = getConfig('YWM_USER_ID', account);
-  if (pinned) return pinned;
-  const cacheKey = account ?? '';
-  const hit = cachedUsers.get(cacheKey);
-  if (hit) return hit;
-  const data = await ywmGet<{ user_id: number }>('/user/', account);
-  cachedUsers.set(cacheKey, String(data.user_id));
-  return String(data.user_id);
-}
-
-interface QaTextStat {
-  text_indicator?: { type: string; value: string };
-  statistics?: Array<{ date: string; field: string; value: number }>;
-}
-
-/**
- * POST query-analytics/list c пагинацией (limit API — 500 за страницу).
- * maxRows может быть функцией от count — чтобы после первой страницы решить,
- * сколько тянуть (например «всё до SORT_FETCH_CAP» для честной сортировки топа).
- */
-async function queryAnalytics(
-  hostId: string,
-  body: Record<string, unknown>,
-  maxRows: number | ((count: number) => number),
-  account?: string,
-): Promise<{ count: number; items: QaTextStat[] }> {
-  const userId = await getUserId(account);
-  const path = `/user/${userId}/hosts/${encodeURIComponent(hostId)}/query-analytics/list`;
-  const items: QaTextStat[] = [];
-  let offset = 0;
-  let count = 0;
-  let target = typeof maxRows === 'number' ? maxRows : 500; // до первой страницы count неизвестен
-
-  while (items.length < target) {
-    const limit = Math.min(500, target - items.length);
-    const page = await ywmPost<{ count: number; text_indicator_to_statistics: QaTextStat[] }>(path, { ...body, offset, limit }, account);
-    count = page.count ?? 0;
-    if (typeof maxRows === 'function') target = maxRows(count);
-    const batch = page.text_indicator_to_statistics ?? [];
-    items.push(...batch);
-    if (!batch.length || items.length >= count) break;
-    offset += batch.length;
-  }
-  return { count, items };
-}
-
-/** Сворачивает дневные statistics в агрегаты по запросу. */
-function aggregate(stats: NonNullable<QaTextStat['statistics']>) {
-  let shows = 0;
-  let clicks = 0;
-  let demand = 0;
-  const posValues: number[] = [];
-  for (const s of stats) {
-    switch (s.field) {
-      case 'IMPRESSIONS':
-        shows += s.value;
-        break;
-      case 'CLICKS':
-        clicks += s.value;
-        break;
-      case 'DEMAND':
-        demand += s.value;
-        break;
-      case 'POSITION':
-        posValues.push(s.value);
-        break;
-    }
-  }
-  // позиция: простое среднее по дням (повзвесить на показы построчно API не даёт)
-  const position = posValues.length ? posValues.reduce((a, b) => a + b, 0) / posValues.length : null;
-  return {
-    shows,
-    clicks,
-    ctr: shows > 0 ? clicks / shows : 0,
-    position: position !== null ? Math.round(position * 10) / 10 : null,
-    demand,
-  };
-}
-
-const server = new McpServer({ name: 'ywm', version: '1.0.0' });
+const server = new McpServer({ name: 'ywm', version: '1.3.0' });
 
 registerAuthTools(
   server,
@@ -166,18 +54,21 @@ registerAuthTools(
       'ВНИМАНИЕ: токен должен быть или YANDEX_OAUTH_TOKEN (общий), или YWM_OAUTH_TOKEN.',
     requireAnyOf: [['YANDEX_OAUTH_TOKEN', 'YWM_OAUTH_TOKEN']],
     onSave: () => {
-      cachedUsers.clear();
+      clearUserIdCache();
     },
   },
 );
 
 registerYandexOauthTools(server, 'ywm', 'Яндекс.Вебмастер (hostinfo + verify), опционально + Метрика (чтение)', () => {
-  cachedUsers.clear();
+  clearUserIdCache();
 });
 
 const deviceParam = z.enum(['ALL', 'DESKTOP', 'MOBILE_AND_TABLET', 'MOBILE', 'TABLET']).default('ALL');
 
-const hostIdParam = z.string().optional().describe('Хост Вебмастера (формат https:example.com:443); по умолчанию YWM_HOST_ID');
+const hostIdParam = z
+  .string()
+  .optional()
+  .describe('Хост Вебмастера (формат https:example.com:443); по умолчанию YWM_HOST_ID из конфига; список хостов — ywm_hosts');
 
 /** Резолвит host + user_id и собирает префикс пути /user/{id}/hosts/{host}. */
 async function hostCtx(hostId: string | undefined, account?: string): Promise<{ hostId: string; base: string }> {
@@ -186,27 +77,23 @@ async function hostCtx(hostId: string | undefined, account?: string): Promise<{ 
   return { hostId: h, base: `/user/${userId}/hosts/${encodeURIComponent(h)}` };
 }
 
-/** Диапазон дат YYYY-MM-DD: заданный или последние `days` дней. */
-function dateRange(from: string | undefined, to: string | undefined, days: number): { date_from: string; date_to: string } {
-  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-  return { date_from: from ?? iso(Date.now() - days * 864e5), date_to: to ?? iso(Date.now()) };
-}
-
 const dateFromParam = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .optional()
-  .describe('YYYY-MM-DD (по умолчанию — от дефолтного окна)');
+  .describe('YYYY-MM-DD (по умолчанию — от дефолтного окна инструмента)');
 const dateToParam = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .optional()
-  .describe('YYYY-MM-DD (по умолчанию сегодня)');
+  .describe('YYYY-MM-DD (по умолчанию сегодня по МСК)');
 
 server.registerTool(
   'ywm_hosts',
   {
-    description: 'user_id токена и список сайтов в Вебмастере (host_id, verified) — для проверки доступа и настройки YWM_HOST_ID.',
+    description:
+      'user_id токена и список сайтов в Вебмастере — для проверки доступа и настройки YWM_HOST_ID. ' +
+      'Ответ: { user_id, hosts: [{ host_id, verified, ... }] } — host_id подставлять в параметр hostId других инструментов.',
     inputSchema: {
       account: accountParam,
     },
@@ -222,10 +109,11 @@ server.registerTool(
   'ywm_search_queries',
   {
     description:
-      'Запросы Яндекса по конкретному URL (query-analytics, данные за ~2 недели): ' +
+      'Запросы Яндекса по конкретному URL (query-analytics, данные за ~2 недели по умолчанию — переопределяется dateFrom/dateTo): ' +
       '{ rows: [{ query, shows, clicks, ctr, position, demand }] }. ' +
       'url — путь («/oae/dubai/») или полный URL; сопоставление TEXT_CONTAINS по умолчанию. ' +
-      'Без url — топ запросов всего хоста.',
+      'Без url — топ запросов всего хоста. ' +
+      'truncated=true — запросов больше внутреннего капа (3000): топ отсортирован по первым 3000 строкам выборки API.',
     inputSchema: {
       url: z.string().optional().describe('Путь или URL страницы; пусто = весь хост'),
       urlMatch: z.enum(['TEXT_CONTAINS', 'TEXT_MATCH']).default('TEXT_CONTAINS'),
@@ -234,17 +122,22 @@ server.registerTool(
         .enum(['IMPRESSIONS', 'CLICKS', 'CTR', 'POSITION', 'DEMAND'])
         .default('IMPRESSIONS')
         .describe('Поле сортировки результата (после агрегации)'),
-      limit: z.number().int().min(1).max(3000).default(500),
-      hostId: z.string().optional().describe('Хост (по умолчанию YWM_HOST_ID из конфига)'),
+      dateFrom: dateFromParam,
+      dateTo: dateToParam,
+      limit: z.number().int().min(1).max(3000).default(500).describe('Сколько строк вернуть (дефолт 500, максимум 3000)'),
+      hostId: hostIdParam,
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
     const hostId = resolveHost(args.hostId, args.account);
+    validateOptionalDateOrder(args.dateFrom, args.dateTo);
     const body: Record<string, unknown> = {
       text_indicator: 'QUERY',
       device_type_indicator: args.device,
     };
+    if (args.dateFrom) body.date_from = args.dateFrom;
+    if (args.dateTo) body.date_to = args.dateTo;
     if (args.url) {
       body.filters = {
         text_filters: [{ text_indicator: 'URL', operation: args.urlMatch, value: args.url }],
@@ -257,32 +150,16 @@ server.registerTool(
       (total) => Math.min(Math.max(args.limit, total), SORT_FETCH_CAP),
       args.account,
     );
-    let rows = items.map((it) => ({
-      query: it.text_indicator?.value ?? '',
-      ...aggregate(it.statistics ?? []),
-    }));
-    const key = { IMPRESSIONS: 'shows', CLICKS: 'clicks', CTR: 'ctr', POSITION: 'position', DEMAND: 'demand' }[args.orderBy] as
-      | 'shows'
-      | 'clicks'
-      | 'ctr'
-      | 'position'
-      | 'demand';
-    rows = rows.sort((a, b) => {
-      const av = a[key] ?? Number.POSITIVE_INFINITY;
-      const bv = b[key] ?? Number.POSITIVE_INFINITY;
-      return args.orderBy === 'POSITION' ? (av as number) - (bv as number) : (bv as number) - (av as number);
-    });
-    rows = rows.slice(0, args.limit);
+    const rows = sortQueries(items.map(toQueryRow), args.orderBy).slice(0, args.limit);
+    const truncated = count > SORT_FETCH_CAP;
     return jsonResult({
       hostId,
       url: args.url ?? null,
       totalQueries: count,
       rowCount: rows.length,
-      ...(count > SORT_FETCH_CAP
-        ? {
-            approximate: true,
-            note: `запросов ${count} > ${SORT_FETCH_CAP}: топ отсортирован по первым ${SORT_FETCH_CAP} строкам выборки API`,
-          }
+      truncated, // true: запросов больше капа — топ отсортирован по первым SORT_FETCH_CAP строкам выборки API
+      ...(truncated
+        ? { note: `запросов ${count} > ${SORT_FETCH_CAP}: топ отсортирован по первым ${SORT_FETCH_CAP} строкам выборки API` }
         : {}),
       rows,
     });
@@ -293,13 +170,15 @@ server.registerTool(
   'ywm_recommended_queries',
   {
     description:
-      'Недобранные запросы по URL (аппроксимация: в API v4 нет «рекомендованных» — берём запросы ' +
-      'со спросом (DEMAND), где кликов нет или позиция за топ-10): { queries: [{ query, demand, shows, position, reason }] }.',
+      'Недобранные запросы по URL (аппроксимация: в API v4 нет «рекомендованных»). Берём запросы ТРЁХ категорий: ' +
+      'показы без кликов, позиция за топ-10, любой запрос со спросом (DEMAND > 0) — категория указана в поле reason. ' +
+      'Ответ: { queries: [{ query, demand, shows, clicks, position, reason }] }. ' +
+      'truncated=true — запросов больше внутреннего капа (3000): фильтр применён к первым 3000 строкам выборки API.',
     inputSchema: {
       url: z.string().describe('Путь («/oae/dubai/») или полный URL страницы'),
       device: deviceParam,
-      limit: z.number().int().min(1).max(1000).default(200),
-      hostId: z.string().optional().describe('Хост (по умолчанию YWM_HOST_ID из конфига)'),
+      limit: z.number().int().min(1).max(1000).default(200).describe('Сколько запросов вернуть (дефолт 200, максимум 1000)'),
+      hostId: hostIdParam,
       account: accountParam,
     },
   },
@@ -315,25 +194,12 @@ server.registerTool(
       (total) => Math.min(total, SORT_FETCH_CAP), // все строки до капа — фильтр/сортировка честные
       args.account,
     );
-    const queries = items
-      .map((it) => ({ query: it.text_indicator?.value ?? '', ...aggregate(it.statistics ?? []) }))
-      .filter((r) => (r.shows > 0 && r.clicks === 0) || (r.position !== null && r.position > 10) || r.demand > 0)
-      .map((r) => ({
-        query: r.query,
-        demand: r.demand,
-        shows: r.shows,
-        clicks: r.clicks,
-        position: r.position,
-        reason:
-          r.clicks === 0 && r.shows > 0 ? 'показы без кликов' : r.position !== null && r.position > 10 ? 'позиция за топ-10' : 'есть спрос',
-      }))
-      .sort((a, b) => b.demand - a.demand || b.shows - a.shows)
-      .slice(0, args.limit);
+    const queries = filterRecommended(items.map(toQueryRow), args.limit);
     return jsonResult({
       hostId,
       url: args.url,
       note: 'аппроксимация: API v4 не отдаёт «рекомендованные запросы» из UI',
-      ...(count > SORT_FETCH_CAP ? { approximate: true } : {}),
+      truncated: count > SORT_FETCH_CAP, // true: запросов больше капа — фильтр применён к первым SORT_FETCH_CAP строкам
       queries,
     });
   }),
@@ -344,68 +210,37 @@ server.registerTool(
   {
     description:
       'Топ-запросы хоста за неделю (search-queries/popular, до 3000): ' +
-      '{ rows: [{ query, shows, clicks, avg_show_position, avg_click_position }] }. Фильтра по URL здесь нет.',
+      '{ rows: [{ query, shows, clicks, avg_show_position, avg_click_position }] }. Фильтра по URL здесь нет. ' +
+      'truncated=true — набран ровно limit: за ним могли остаться строки (увеличь limit).',
     inputSchema: {
       orderBy: z.enum(['TOTAL_SHOWS', 'TOTAL_CLICKS']).default('TOTAL_SHOWS'),
       device: deviceParam,
-      dateFrom: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .optional(),
-      dateTo: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .optional(),
-      limit: z.number().int().min(1).max(3000).default(500),
-      hostId: z.string().optional().describe('Хост (по умолчанию YWM_HOST_ID из конфига)'),
+      dateFrom: dateFromParam,
+      dateTo: dateToParam,
+      limit: z.number().int().min(1).max(3000).default(500).describe('Сколько строк вернуть (дефолт 500, максимум 3000)'),
+      hostId: hostIdParam,
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
     const hostId = resolveHost(args.hostId, args.account);
-    const userId = await getUserId(args.account);
-    const rows: Array<Record<string, unknown>> = [];
-    let offset = 0;
-
-    while (rows.length < args.limit) {
-      const limit = Math.min(500, args.limit - rows.length);
-      const qs = new URLSearchParams({
-        order_by: args.orderBy,
-        device_type_indicator: args.device,
-        offset: String(offset),
-        limit: String(limit),
-      });
-      for (const ind of ['TOTAL_SHOWS', 'TOTAL_CLICKS', 'AVG_SHOW_POSITION', 'AVG_CLICK_POSITION']) {
-        qs.append('query_indicator', ind);
-      }
-      if (args.dateFrom) qs.set('date_from', args.dateFrom);
-      if (args.dateTo) qs.set('date_to', args.dateTo);
-
-      const page = await ywmGet<{ queries: Array<{ query_text: string; indicators: Record<string, number> }> }>(
-        `/user/${userId}/hosts/${encodeURIComponent(hostId)}/search-queries/popular?${qs}`,
-        args.account,
-      );
-      const batch = page.queries ?? [];
-      for (const q of batch) {
-        rows.push({
-          query: q.query_text,
-          shows: q.indicators?.TOTAL_SHOWS ?? 0,
-          clicks: q.indicators?.TOTAL_CLICKS ?? 0,
-          avg_show_position: q.indicators?.AVG_SHOW_POSITION ?? null,
-          avg_click_position: q.indicators?.AVG_CLICK_POSITION ?? null,
-        });
-      }
-      if (batch.length < limit) break;
-      offset += batch.length;
-    }
-    return jsonResult({ hostId, rowCount: rows.length, rows });
+    validateOptionalDateOrder(args.dateFrom, args.dateTo);
+    // пагинация (обрыв по короткой странице, эвристика truncated) — fetchPopular в queries.ts
+    const { rows, truncated } = await fetchPopular(
+      hostId,
+      { orderBy: args.orderBy, device: args.device, limit: args.limit, dateFrom: args.dateFrom, dateTo: args.dateTo },
+      args.account,
+    );
+    return jsonResult({ hostId, rowCount: rows.length, truncated, rows });
   }),
 );
 
 server.registerTool(
   'ywm_summary',
   {
-    description: 'Сводка по хосту: ИКС (sqi), страниц в поиске (searchable_pages_count), исключено, число проблем сайта по важности.',
+    description:
+      'Сводка по хосту. Ответ: { sqi (ИКС), searchable_pages_count (страниц в поиске), excluded_pages_count (исключено), ' +
+      'site_problems (число проблем сайта по важности) }.',
     inputSchema: { hostId: hostIdParam, account: accountParam },
   },
   safeHandler(async (args) => {
@@ -424,7 +259,7 @@ server.registerTool(
 server.registerTool(
   'ywm_sqi_history',
   {
-    description: 'История ИКС (индекс качества сайта) по датам: { points: [{ date, value }] }.',
+    description: 'История ИКС (индекс качества сайта) по датам: { points: [{ date, value }] }. Окно по умолчанию — 180 дней.',
     inputSchema: { hostId: hostIdParam, dateFrom: dateFromParam, dateTo: dateToParam, account: accountParam },
   },
   safeHandler(async (args) => {
@@ -438,7 +273,8 @@ server.registerTool(
 server.registerTool(
   'ywm_indexing_history',
   {
-    description: 'Динамика числа страниц В ПОИСКЕ по датам (search-urls/in-search): { history: [{ date, value }] }.',
+    description:
+      'Динамика числа страниц В ПОИСКЕ по датам (search-urls/in-search): { history: [{ date, value }] }. Окно по умолчанию — 30 дней.',
     inputSchema: { hostId: hostIdParam, dateFrom: dateFromParam, dateTo: dateToParam, account: accountParam },
   },
   safeHandler(async (args) => {
@@ -456,11 +292,12 @@ server.registerTool(
   'ywm_external_links',
   {
     description:
-      'Внешние ссылки на сайт (беклинки), выборка: { count (всего), links: [{ source_url, destination_url, discovery_date, source_last_access_date }] }.',
+      'Внешние ссылки на сайт (беклинки), выборка: { count (всего), links: [{ source_url, destination_url, discovery_date, source_last_access_date }] }. ' +
+      'truncated=true — за выборкой есть ещё строки (добирай offset).',
     inputSchema: {
       hostId: hostIdParam,
       offset: z.number().int().min(0).default(0),
-      limit: z.number().int().min(1).max(100).default(50),
+      limit: z.number().int().min(1).max(100).default(50).describe('Размер выборки (дефолт 50, максимум 100)'),
       account: accountParam,
     },
   },
@@ -470,7 +307,11 @@ server.registerTool(
       `${base}/links/external/samples?offset=${args.offset}&limit=${args.limit}`,
       args.account,
     );
-    return jsonResult({ hostId, count: d.count ?? null, offset: args.offset, links: d.links ?? [] });
+    const links = d.links ?? [];
+    const count = d.count ?? null;
+    // truncated по count из ответа API; без count — эвристика «страница заполнена»
+    const truncated = count !== null ? args.offset + links.length < count : links.length === args.limit;
+    return jsonResult({ hostId, count, offset: args.offset, truncated, links });
   }),
 );
 
@@ -478,12 +319,13 @@ server.registerTool(
   'ywm_broken_links',
   {
     description:
-      'Битые ссылки, выборка: внутренние (scope=internal) или внешние (external). { count, links: [{ source_url, destination_url, ... }] }.',
+      'Битые ссылки, выборка: внутренние (scope=internal) или внешние (external). { count, links: [{ source_url, destination_url, ... }] }. ' +
+      'truncated=true — за выборкой есть ещё строки (добирай offset).',
     inputSchema: {
       hostId: hostIdParam,
       scope: z.enum(['internal', 'external']).default('internal'),
       offset: z.number().int().min(0).default(0),
-      limit: z.number().int().min(1).max(100).default(50),
+      limit: z.number().int().min(1).max(100).default(50).describe('Размер выборки (дефолт 50, максимум 100)'),
       account: accountParam,
     },
   },
@@ -493,7 +335,10 @@ server.registerTool(
       `${base}/links/${args.scope}/broken/samples?offset=${args.offset}&limit=${args.limit}`,
       args.account,
     );
-    return jsonResult({ hostId, scope: args.scope, count: d.count ?? null, offset: args.offset, links: d.links ?? [] });
+    const links = d.links ?? [];
+    const count = d.count ?? null;
+    const truncated = count !== null ? args.offset + links.length < count : links.length === args.limit;
+    return jsonResult({ hostId, scope: args.scope, count, offset: args.offset, truncated, links });
   }),
 );
 
@@ -543,7 +388,7 @@ server.registerTool(
   {
     description:
       'История суммарной статистики запросов по хосту по датам (показы/клики/позиции): { indicators: {...} }. ' +
-      'indicator: TOTAL_SHOWS | TOTAL_CLICKS | AVG_SHOW_POSITION | AVG_CLICK_POSITION.',
+      'indicator: TOTAL_SHOWS | TOTAL_CLICKS | AVG_SHOW_POSITION | AVG_CLICK_POSITION. Окно по умолчанию — 30 дней.',
     inputSchema: {
       hostId: hostIdParam,
       indicator: z.enum(['TOTAL_SHOWS', 'TOTAL_CLICKS', 'AVG_SHOW_POSITION', 'AVG_CLICK_POSITION']).default('TOTAL_SHOWS'),

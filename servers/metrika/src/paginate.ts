@@ -8,6 +8,13 @@ export interface StatResponse {
   sample_share?: number;
 }
 
+/** Проверка формы ответа Stat API: data обязан быть массивом, иначе ниже по коду голый TypeError. */
+export function assertStatRows(res: unknown, where: string): asserts res is StatResponse {
+  if (!res || typeof res !== 'object' || !Array.isArray((res as { data?: unknown }).data)) {
+    throw new Error(`Неожиданный формат ответа Метрики (${where}): data не массив — проверьте ответ API`);
+  }
+}
+
 /** Уникальный ключ строки — по именам всех измерений (SOH-разделитель не встречается в значениях). */
 export function rowKey(r: StatResponse['data'][number]): string {
   return r.dimensions.map((d) => d.name).join(String.fromCharCode(1));
@@ -28,12 +35,14 @@ export async function collectAllPages(
 ): Promise<StatResponse> {
   const pageSize = Math.min(pageSizeCap, maxRows);
   const first = await fetchPage(1, pageSize); // offset в Метрике 1-based
+  assertStatRows(first, 'page 1');
   const all: StatResponse = { ...first, data: [...first.data] };
   const seen = new Set(first.data.map(rowKey));
   let rawFetched = first.data.length;
   const wanted = Math.min(maxRows, first.total_rows ?? 0);
   while (all.data.length < wanted) {
     const page = await fetchPage(rawFetched + 1, pageSize);
+    assertStatRows(page, `offset ${rawFetched + 1}`);
     if (!page.data.length) break;
     rawFetched += page.data.length;
     let added = 0;

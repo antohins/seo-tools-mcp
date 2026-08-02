@@ -6,6 +6,226 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **docs**: `aparser` was missing from the root READMEs — added to the summary table, the
+  tools sections and the "getting access" sections of `README.md`/`README.en.md` (self-hosted
+  disclaimer, proxy model); `.env.example` shows the `APARSER_URL` format
+  (`http://IP:9091/API`); the live smoke now includes `aparser_ping`.
+
+### Fixed
+- **xmlstock**: `includeSimilar` now sends `filter=0` (standard Google semantics for omitted/similar
+  results) instead of `filter=1`.
+- **xmlstock**: a non-XML/invalid response (e.g. an HTML error page) is no longer silently treated
+  as a successful empty SERP — a clear error is thrown and the call is NOT counted as billed.
+- **xmlstock**: `found` extraction prefers `priority="all"` (fallback — first element) and no longer
+  turns a legitimate `0` into `null`; the duplicated inline copy in `xmlstock_serp` is removed.
+- **xmlstock**: retry-exhaustion error now includes the last error code and message
+  (`XMLStock error 55: … — исчерпаны ретраи (4 попытки)`).
+- **xmlstock**: region-tree cache now deduplicates the in-flight promise — two parallel
+  `xmlstock_wordstat_regions` calls on a cold cache cost one paid `regionsTree` request, not two.
+- **xmlriver**: `found` extraction prefers `priority="all"` (fallback — first element) and no longer
+  turns a legitimate `0` into `null`; the non-XML check is strengthened to `yandexsearch.response`
+  (HTML error pages throw a clear error and are NOT billed).
+- **xmlriver**: Yandex `safeSearch` no longer sends `filter=moderate/strict/none` (at XMLRiver the
+  Yandex `filter` means "hide similar results", enabled by `filter=1`) — the parameter is not sent
+  for `engine=yandex` at all; a Yandex region id (`lr`) is no longer sent for `engine=google`
+  (for Google `lr` is a language code).
+- **xmlriver**: `xmlriver_check_index` now supports Yandex (`engine` parameter, `inindex` verified
+  live); `strict` is sent only when `strict=true`; query length is validated (≤ 1400 chars,
+  otherwise API error 16).
+- **xmlriver**: retry policy aligned with the API docs — code 500 is retried with 5 s/10 s pauses
+  (2 retries: 4 consecutive 500s trigger code 202, an hour-long block); code 202 is reported as a
+  fatal temporary block ("повторите позже"); auth/balance codes 31/42/45/200 point to
+  `xmlriver_set_credentials`; code 55 removed (absent from the XMLRiver docs); retry-exhaustion
+  errors carry the last code and message; unreachable dead code removed.
+- **gsc** (security): path traversal in `gsc_save_sa_json` — the `account` parameter was inserted
+  into the key-file path unvalidated (`../../tmp/x` could write outside the config dir); the
+  account name is now validated (via `saJsonFileName`/`validateAccount`) before any file write.
+- **gsc**: the OAuth loopback listener auto-close timer is now cancelled in `stopLoopback()` —
+  a timer from a finished flow can no longer kill the listener of a newer flow.
+- **gsc**: the refresh→access exchange deduplicates the in-flight promise per account (parallel
+  calls share one token request); the 401 retry now applies only to the OAuth path (for a service
+  account it is pointless — JWT caches the token itself — so SA 401 reports a clear error
+  immediately); 403 is classified as "no access to the property" pointing to
+  `gsc_list_sites`/`gsc_get_site` and the `sc-domain:` / URL-prefix-with-trailing-`/` formats.
+- **gsc**: `gsc_oauth_start` with `account` no longer silently overwrites the base
+  `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` — credentials are saved profile-suffixed
+  (`GOOGLE_CLIENT_ID__<account>`), documented in the tool response; `gsc_oauth_finish` and
+  `gsc_save_sa_json` warn when the key is overridden by the real process environment.
+- **gsc**: `gsc_query` honestly reports the truncation reason (`truncatedBy: limit|deadline` —
+  the 5-minute pagination deadline is no longer logged as "обрезано по rowLimit"), exposes
+  `firstIncompleteDate` for `dataState=all`, validates `startDate <= endDate`, and its description
+  documents Pacific Time dates, ~16 months of history, the ~2-3 day finalization lag and
+  `ctr` being a 0..1 fraction; a broken `GSC_SA_JSON` path now yields a clear error pointing to
+  `gsc_set_credentials`/`gsc_save_sa_json`; pure logic (resolveSite, date validation,
+  invalid_grant classification, key mapping) moved to `src/logic.ts` and is unit-tested.
+- **docker**: the six older server Dockerfiles (xmlstock, xmlriver, wordstat, gsc, ywm, metrika)
+  now also copy `servers/aparser/package.json`, fixing the `pnpm install --frozen-lockfile`
+  mismatch with the lockfile.
+- **wordstat**: the region-tree cache now deduplicates the in-flight promise per account — two
+  parallel `wordstat_regions` calls on a cold cache cost one `getRegionsTree` request, not two.
+- **wordstat**: `wordstat_dynamics` validates dates before the request with clear messages:
+  `fromDate <= toDate`; `monthly` requires `fromDate` = 1st of month and `toDate` = last day of
+  month; `weekly` requires `fromDate` = Monday; `daily` is limited to the last 60 days.
+- **wordstat**: error classification in the HTTP layer — 401/403 point to
+  `WORDSTAT_API_KEY`/`WORDSTAT_FOLDER_ID` and the `search-api.webSearch.user` role; the final
+  429 (after retries) mentions the 100 requests/hour quota.
+- **shared**: user-facing error texts no longer contain the `<server>` placeholder —
+  `getYandexToken`/`yandexFetchJson` accept an optional server prefix (`ywm`/`metrika`) and
+  name real tools (`ywm_oauth_start`, `metrika_set_credentials`, …); `requireEnv` uses a
+  neutral placeholder-free wording.
+- **ywm**: `getUserId` validates the `/user/` response (non-numeric `user_id` → a clear error,
+  never cached) and deduplicates the in-flight promise — two parallel calls on a cold cache
+  cost one `/user/` request, not two.
+- **ywm**: error classification in the HTTP layer — 403 points to host access / the Webmaster
+  scope (`ywm_hosts`, `ywm_oauth_start`), 404 — to the `hostId` format (`https:example.com:443`);
+  `resolveHost` validates the `hostId` format up front.
+- **ywm**: date validation — `dateFrom <= dateTo` with a clear message in every dated tool;
+  the default "today" is computed in Moscow time (UTC+3), matching Yandex's statistics timezone.
+- **metrika**: `accuracy` is validated before the request (`low|medium|high|full` or a sample
+  share in (0,1]) with a clear message; the description no longer lists the invalid `auto`.
+- **metrika**: default dates ("today", the 30-day window) are computed in Moscow time (UTC+3),
+  not UTC; `date1 <= date2` (`startDate <= endDate`) is validated in every dated tool.
+- **metrika**: an unexpected Stat API response shape (`data` not an array) now throws a clear
+  "неожиданный формат ответа Метрики" error instead of a bare TypeError (single page and
+  paginated collection alike).
+- **metrika**: the goals cache is keyed by `account + counterId` and deduplicates the in-flight
+  promise — two parallel `metrika_landing_behavior` calls on a cold cache cost one goals request.
+- **metrika**: a failed goals request in `metrika_landing_behavior` surfaces as
+  `goals_loaded: false` + `goals_error: true` (previously only a stderr line); auto-clipping
+  beyond 10 goals is flagged with `goals_truncated: true` + `goals_dropped`.
+- **metrika**: 403/404 from the Stat/Management API are classified with actionable hints —
+  no counter access / counter not found, pointing to `metrika_counters` and
+  `METRIKA_COUNTER_ID` (`metrika_set_credentials`).
+- **aparser**: a "success but no `results`" API response is no longer silently treated as a
+  legitimate empty SERP — `aparser_serp_*`/`aparser_suggest`/`aparser_request` now return
+  `results_present: false` + `note` (a broken response is distinguished from a legitimately
+  empty result, which always has `results[0]` with an empty `serp`); SERP results also carry
+  `empty: true` for a legitimate empty SERP and `success`/`diagnostic` are documented as the
+  captcha/burned-proxy signal.
+- **aparser**: `aparser_bulk_request` no longer distorts non-SERP results — `parseSerpResult`
+  normalization applies only to `SE::Google`/`SE::Yandex`, other parsers' results are returned
+  as-is; `count < requested` is flagged with a `note`; the heavy bulk call is made with
+  `attempts: 1` (no retry doubling the instance load) and a documented 120 s single-shot timeout.
+- **aparser** (security): `aparser_get_preset` masks option values whose keys match
+  `pass|key|token|secret` (proxy credentials, parser API keys); the non-JSON error snippet
+  is run through secret masking (`key=value` → `REDACTED`); `aparser_proxies` output is
+  capped at 100 entries (`truncated: true`, full `count`).
+- **aparser**: `aparser_suggest` now runs the same live-proxy preflight as the SERP tools;
+  network-level failures point to `aparser_ping`/`aparser_set_credentials`; pure logic
+  (`aparserCall`, `buildOverrides`, `resolveExec`, `ensureProxies`, preset masking) moved to
+  `src/client.ts` and is unit-tested (`tests/aparser-client.test.ts`).
+- **gsc**: reusing a live OAuth loopback listener now RE-ARMS its 10-minute auto-close timer —
+  previously a timer from an abandoned flow (no `gsc_oauth_finish`) fired mid-flow and killed
+  the listener of the next flow; the loopback logic moved to `servers/gsc/src/loopback.ts`
+  and is unit-tested.
+- **shared** (yandex-oauth): when the same token string was stored in both `YWM_OAUTH_TOKEN`/
+  `METRIKA_OAUTH_TOKEN` and `YANDEX_OAUTH_TOKEN`, a refresh rewrote only the shared key — the
+  next 401 then misread the specific key as a "foreign" token and refused to refresh; a refresh
+  now rewrites BOTH keys when they were equal; the "refresh token was rejected" case (dead
+  grant) is now reported as "грант отозван или протух — переавторизуйся" instead of
+  "refresh-токена нет".
+- **shared**: `maskSecretsInText` now also masks the JSON form (`"password":"secret"` →
+  `"password":"REDACTED"`), not only `key=value` pairs.
+- **xmlstock**: `xmlstock_wordstat_dynamics` validates `from <= to` before the paid request
+  with a clear message.
+- **aparser**: Biome `useOptionalChain` warnings cleaned up (`a && a.b` → `a?.b`) — `pnpm lint`
+  is now warning-free.
+
+### Changed
+- **xmlriver**: `groupby` is silently ignored by the API (always 10 organic results per page,
+  verified live) — `xmlriver_serp`/`_images`/`_news` now collect `depth` by pagination (`page`:
+  Google from 1, Yandex from 0, stop at the first empty page, continuous `position` numbering);
+  `groupby` is no longer sent. Each page is a separate paid request.
+- **all servers**: the `McpServer({ version })` literal is synchronized with the package version
+  (1.0.0 → 1.3.0); `AGENTS.md` now reminds maintainers to bump it on release.
+- **xmlstock**: `xmlstock_serp` response gains `count` (like `xmlriver_serp`); the Wordstat HTTP
+  layer (`wordstatGet`), date helpers (`wsDate`, `from <= to` validation in
+  `xmlstock_wordstat_dynamics`) and the per-account region-names cache moved to
+  `servers/xmlstock/src/wordstat.ts`; `verticalCommon` moved to `src/serp.ts`
+  (`index.ts` is registration-only).
+- **ywm**: `ywm_popular` pagination (short-page stop, `truncated` heuristic) moved to
+  `servers/ywm/src/queries.ts`; the duplicated inline date schemas were replaced with the shared
+  `dateFromParam`/`dateToParam`; date-order validation is now unconditional (a lone future
+  `dateFrom` fails with a clear message); `truncated` is spelled out in the descriptions of
+  `ywm_search_queries`/`ywm_recommended_queries`/`ywm_popular`.
+- **wordstat**: the `daily` 60-day boundary in `wordstat_dynamics` is computed in Moscow time
+  (UTC+3), matching Yandex's timezone; `wordstat_frequency` description spells out
+  `related_truncated`.
+- **server.json**: declared the previously missing optional env vars — gsc
+  (`GSC_SA_JSON`, `GSC_OAUTH_PORT`), metrika (`METRIKA_OAUTH_TOKEN`, `YANDEX_CLIENT_ID`,
+  `YANDEX_CLIENT_SECRET`), ywm (`YWM_USER_ID`), xmlstock/xmlriver (`*_EXCLUDE_DOMAINS`,
+  `*_PRICE_PER_CALL`, `XMLSTOCK_WORDSTAT_PRICE_PER_CALL`), aparser (`APARSER_GOOGLE_PRESET`,
+  `APARSER_YANDEX_PRESET`, `APARSER_PROXY_CHECKERS`, `APARSER_USE_PROXY`).
+- **docs**: `AGENTS.md` documents the new per-server modules, the `truncated` polarity convention
+  (SERP servers vs the rest) and the `McpServer` version bump; the smoke-tool lists in both
+  READMEs include `xmlriver_balance`; `README.en.md` gains the GSC note (Pacific Time dates,
+  ~16 months of history, ~2-3 day lag, `ctr` 0..1); `ywm_search_queries` entries mention
+  `dateFrom`/`dateTo`.
+- **tests**: new `tests/gsc-loopback.test.ts` (timer re-arm on listener reuse, `stopLoopback`
+  clearing the timer), `tests/yandex-oauth-refresh.test.ts` (specific===general refresh
+  synchronization, dead-grant vs missing-refresh wording), `tests/xmlstock-wordstat-get.test.ts`
+  (`wordstatGet` auth classification 100/200, HTTP retries).
+- **xmlstock**: SERP responses include `truncated` (true = the SERP ended before the requested
+  `depth`); empty SERPs (code 15, still billed) are marked with `empty: true` + `note`.
+- **xmlstock**: Wordstat spend is tracked separately via `XMLSTOCK_WORDSTAT_PRICE_PER_CALL`
+  (default 0.019 ₽, vs `XMLSTOCK_PRICE_PER_CALL` for SERP).
+- **xmlstock**: parameter validation tightened (`from`/`to` — `YYYY-MM-DD`, `searchDomain`, `lang`,
+  `l10n` enum); descriptions clarified (single `region`, `safeSearch=moderate` is a no-op for
+  Google, `includeAds` reflects ads via `packs`, cold-cache paid `regionsTree` warning).
+- **xmlstock**: SERP/Wordstat HTTP layer and helpers moved to `servers/xmlstock/src/serp.ts`
+  for unit-testability; the unknown-region error now points to `xmlstock_wordstat_regions_tree`.
+- **xmlriver**: SERP/vertical responses include `truncated` and `empty`/`note` for billed empty
+  SERPs (code 15); the SERP HTTP layer and helpers moved to `servers/xmlriver/src/serp.ts`;
+  validation tightened (`searchDomain`/`lang` regex); descriptions spell out the response shape,
+  per-page pricing and the Google-only `safeSearch`.
+- **.env.example**: added the XMLRIVER and APARSER sections.
+- **tests**: new `tests/xmlriver-serp.test.ts` (pagination, retries, error codes, `checkIndex`);
+  live smoke now also covers `xmlriver_balance`.
+- **wordstat**: responses enriched — `wordstat_regions` returns `total` + `truncated` (true = the
+  result was cut by `limit`) and `region_names_resolved` (false = the name tree failed to load,
+  `region_name` is null); `wordstat_frequency` returns `related_truncated`
+  (`related.length >= relatedLimit`).
+- **wordstat**: pure logic (`wordstatPost` with error classification, `resolveDevices`, `toNum`,
+  `hasOperators`, `exactForm`, `validateDynamicsDates`, region-names cache factory) moved to
+  `servers/wordstat/src/wordstat.ts` for unit-testability; descriptions clarified (the API is
+  free with a 100/hour quota; `wordstat_regions` costs 2 API requests on a cold daily cache,
+  then 1; `region`/`device` value lists).
+- **tests**: new `tests/wordstat.test.ts` (operators/exact form, devices, region-cache in-flight
+  dedup + TTL, dynamics date validation, 401/403/429 classification).
+- **ywm**: pure logic (HTTP layer with error classification, `resolveHost`, `getUserId`,
+  query-analytics pagination, `aggregate`, MSK `dateRange`, `filterRecommended`) moved to
+  `servers/ywm/src/queries.ts` for unit-testability; `index.ts` is registration-only.
+- **ywm**: `truncated` unified across tools — `ywm_popular` (true only when the row cap was hit,
+  not on a short last page), `ywm_external_links`/`ywm_broken_links` (computed from the API
+  `count`), `ywm_search_queries`/`ywm_recommended_queries` (replaces the ad-hoc `approximate`).
+- **ywm**: `ywm_search_queries` accepts `dateFrom`/`dateTo` (the API defaults to ~2 weeks);
+  `ywm_recommended_queries` description honestly lists all three categories
+  (shows without clicks, position beyond top-10, any demand) mirrored in the `reason` field;
+  parameter descriptions spell out `hostId` format, response shapes and limit defaults/maxes;
+  `server.json` declares `YWM_OAUTH_TOKEN`/`YANDEX_CLIENT_ID`/`YANDEX_CLIENT_SECRET`.
+- **tests**: new `tests/ywm.test.ts` (`getUserId` validation + in-flight dedup, 403/404
+  classification, `aggregate`, null-position sorting, MSK date ranges, `resolveHost`,
+  `filterRecommended` categories).
+- **metrika** (BREAKING for 3 tools): `bounceRate` is now returned as a percent (0–100) in
+  `metrika_landing_behavior`, `metrika_search_phrases` and `metrika_top_landings` — previously
+  these three divided the API value by 100 and returned a fraction (0–1). The unit is now
+  consistent across ALL metrika tools (runReport-based tools already returned the raw percent)
+  and is spelled out in the descriptions.
+- **metrika**: responses enriched — `truncated` (rows cut by `limit`) added to `metrika_report`,
+  `metrika_bytime`, `metrika_search_phrases`, `metrika_top_landings`; `totalRows` added to
+  `metrika_top_landings`; `sample_share` is passed through whenever `sampled: true`;
+  `metrika_counters` requests `rows=10000` and flags `truncated` if more counters exist.
+- **metrika**: pure logic (MSK `metrikaDates`, `validateDateRange`/`accuracyError`,
+  `resolveCounterId`, the goals cache factory, `clipGoalIds`, `mapLandingTotals`, the Stat/
+  Management HTTP layer with error classification) moved to `servers/metrika/src/utils.ts` for
+  unit-testability; the duplicated `baseMetrics` copy is gone (`SESSION_METRICS` is the single
+  source); the header comment and parameter descriptions were aligned with the actual behavior
+  (shared `YANDEX_OAUTH_TOKEN`, last-significant-source attribution, filter syntax examples).
+- **tests**: new `tests/metrika-utils.test.ts` (MSK dates, date-range/accuracy validation,
+  response-shape errors, goals-cache dedup/TTL/account keying, goal clipping markers,
+  bounceRate units).
+
 ## [1.3.0] — 2026-07-26
 
 ### Added

@@ -76,8 +76,19 @@ const sleepSync = (ms: number) => {
   }
 };
 
+/** Лок старше этого возраста считается протухшим: процесс-владелец умер, не сняв его. */
+const LOCK_STALE_MS = 30_000;
+
 /** Апсертит значения в env-файл атомарно (lock → fresh read → tmp → rename). */
 export function saveEnvValues(values: Record<string, string>): string {
+  // Санитаризация ДО любых действий: значение с переводом строки корраптит .env
+  // и позволяет вклинить чужие ключи («v\nOTHER_KEY=x») — отклоняем всю запись.
+  for (const [key, value] of Object.entries(values)) {
+    if (value && /[\r\n]/.test(value)) {
+      throw new Error(`saveEnvValues: значение ${key} содержит перевод строки — запись в .env отклонена`);
+    }
+  }
+
   mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
 
   // лок best-effort: каталог-семафор, ждём до 2 с, дальше пишем всё равно
@@ -90,6 +101,17 @@ export function saveEnvValues(values: Record<string, string>): string {
       locked = true;
       break;
     } catch {
+      // протухший лок (процесс умер между mkdir и rmdir): снимаем сами и захватываем,
+      // иначе КАЖДАЯ последующая запись ждала бы 2 с и писала без блокировки
+      try {
+        const st = statSync(lockDir);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          rmdirSync(lockDir);
+          continue;
+        }
+      } catch {
+        /* лок уже снят другим процессом — просто пробуем снова */
+      }
       if (Date.now() > deadline) break;
       sleepSync(20);
     }
@@ -132,8 +154,33 @@ export function maskSecret(v: string | undefined): string | null {
 }
 
 /** Имена query-параметров, значения которых нельзя писать в логи. */
-const SECRET_PARAM_RE =
-  /^(key|apikey|api_key|token|access_token|refresh_token|password|passwd|pass|pwd|secret|client_secret|user|auth|sign)$/i;
+const SECRET_PARAM_NAMES = [
+  'key',
+  'apikey',
+  'api_key',
+  'token',
+  'access_token',
+  'refresh_token',
+  'password',
+  'passwd',
+  'pass',
+  'pwd',
+  'secret',
+  'client_secret',
+  'user',
+  'auth',
+  'sign',
+];
+const SECRET_PARAM_RE = new RegExp(`^(${SECRET_PARAM_NAMES.join('|')})$`, 'i');
+// те же имена — для маскирования «ключ=значение» в произвольном тексте (например, теле ошибки)
+const SECRET_PAIR_RE = new RegExp(`\\b(${SECRET_PARAM_NAMES.join('|')})=[^\\s&]+`, 'gi');
+// и для JSON-формы в тексте: "key":"value" / "key": "value"
+const SECRET_JSON_RE = new RegExp(`("(?:${SECRET_PARAM_NAMES.join('|')})"\\s*:\\s*")[^"]*(")`, 'gi');
+
+/** Маскирует секретные пары в произвольном тексте (тело ошибки и т.п.): «ключ=значение» и JSON-форму "ключ":"значение". */
+export function maskSecretsInText(text: string): string {
+  return text.replace(SECRET_PAIR_RE, (_m, name: string) => `${name}=REDACTED`).replace(SECRET_JSON_RE, '$1REDACTED$2');
+}
 
 /**
  * Маскирует секреты в URL перед логированием: значения секретных query-параметров

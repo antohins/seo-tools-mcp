@@ -9,90 +9,34 @@
  * операторы (!слово, "фраза", -минус) поддерживаются в topRequests/regions,
  * в dynamics — только при period=DAILY; данные topRequests = за последние 30 дней;
  * квоты: 10 rps и 100 запросов/час (429 при превышении).
+ * Чистая логика (HTTP-слой, устройства, точная форма, валидация дат, кэш дерева) — wordstat.ts.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  accountParam,
-  fetchJson,
-  jsonResult,
-  loadSharedEnv,
-  registerAuthTools,
-  requireEnv,
-  resolveRegionIds,
-  safeHandler,
-} from '@seo-tools/shared';
+import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, resolveRegionIds, safeHandler } from '@seo-tools/shared';
 import { z } from 'zod';
 import { flattenRegions, type RegionNode } from './regions.js';
+import { createRegionNamesCache, exactForm, hasOperators, resolveDevices, toNum, validateDynamicsDates, wordstatPost } from './wordstat.js';
 
 loadSharedEnv();
 
-const BASE = 'https://searchapi.api.cloud.yandex.net/v2/wordstat';
-
 // Регионы — единый справочник в shared (resolveRegionIds); полное дерево — wordstat_regions_tree
 
-const DEVICE_MAP: Record<string, string> = {
-  all: 'DEVICE_ALL',
-  desktop: 'DEVICE_DESKTOP',
-  phone: 'DEVICE_PHONE',
-  tablet: 'DEVICE_TABLET',
-};
-
-function resolveDevices(device: string | undefined): string[] | undefined {
-  if (!device || device === 'all') return undefined;
-  return device.split(',').map((d) => {
-    const v = DEVICE_MAP[d.trim().toLowerCase()];
-    if (!v) throw new Error(`Неизвестное устройство «${d}» — допустимо: all, desktop, phone, tablet`);
-    return v;
-  });
-}
-
-async function wordstatPost<T = any>(path: string, body: Record<string, unknown>, account?: string): Promise<T> {
-  const apiKey = requireEnv('WORDSTAT_API_KEY', account);
-  const folderId = requireEnv('WORDSTAT_FOLDER_ID', account);
-  return fetchJson<T>(`${BASE}/${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Api-Key ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ folderId, ...body }),
-    timeoutMs: 60_000,
-  });
-}
-
-const toNum = (v: unknown): number => {
-  const n = Number(v); // count/totalCount приходят строками (proto int64)
-  return Number.isFinite(n) ? n : 0;
-};
-
 // Справочник id→название регионов: дерево большое и меняется редко — кешируем на сутки per-профиль.
-const REGION_NAMES_TTL_MS = 24 * 60 * 60_000;
-const regionNamesCache = new Map<string, { ts: number; names: Map<string, string> }>();
-async function regionNames(account?: string): Promise<Map<string, string>> {
+// Дедупликация in-flight промиса внутри createRegionNamesCache: параллельные вызовы на холодном
+// кэше дают ОДИН запрос getRegionsTree, а не несколько.
+const regionNamesCaches = new Map<string, () => Promise<Map<string, string>>>();
+function regionNames(account?: string): Promise<Map<string, string>> {
   const key = account ?? '';
-  const hit = regionNamesCache.get(key);
-  if (hit && Date.now() - hit.ts < REGION_NAMES_TTL_MS) return hit.names;
-  const tree = await wordstatPost<{ regions?: RegionNode[] }>('getRegionsTree', {}, account);
-  const names = flattenRegions(tree.regions);
-  regionNamesCache.set(key, { ts: Date.now(), names });
-  return names;
-}
-
-/**
- * true, если во фразе уже есть операторы Вордстата — тогда точную форму не строим сами.
- * ВАЖНО: дефис/минус и «+» — операторы только В НАЧАЛЕ слова (« -слово», «+на»);
- * дефис внутри слова («санкт-петербург») оператором НЕ является.
- */
-const hasOperators = (q: string): boolean => /["[\]()|]/.test(q) || /(^|\s)[!+-]\S/.test(q);
-
-/** «купить квартиру» → «"!купить !квартиру"» (точная частотность как в веб-Вордстате). */
-function exactForm(query: string): string {
-  return `"${query
-    .trim()
-    .split(/\s+/)
-    .map((w) => `!${w}`)
-    .join(' ')}"`;
+  let cache = regionNamesCaches.get(key);
+  if (!cache) {
+    cache = createRegionNamesCache(async () => {
+      const tree = await wordstatPost<{ regions?: RegionNode[] }>('getRegionsTree', {}, account);
+      return flattenRegions(tree.regions);
+    });
+    regionNamesCaches.set(key, cache);
+  }
+  return cache();
 }
 
 interface TopResponse {
@@ -101,7 +45,7 @@ interface TopResponse {
   associations?: Array<{ phrase: string; count: string }>;
 }
 
-const server = new McpServer({ name: 'wordstat', version: '1.0.0' });
+const server = new McpServer({ name: 'wordstat', version: '1.3.0' });
 
 registerAuthTools(
   server,
@@ -126,7 +70,8 @@ server.registerTool(
     description:
       'Частотность фразы в Яндексе за последние 30 дней: широкая (freq_broad) и точная (freq_exact, «"!слово !слово"») ' +
       '+ уточняющие запросы (related, «левая колонка» Вордстата) и похожие (associations, «правая колонка», ≤20). ' +
-      '2 запроса к API на вызов (квота 100/час). region: «Москва»/«Россия»/id, можно несколько через запятую.',
+      'related_truncated=true — related обрезан по relatedLimit (за ответом могли остаться строки, увеличь relatedLimit). ' +
+      'Официальный API — бесплатный, 2 запроса к API на вызов (квота 100/час). region: «Москва»/«Россия»/id, можно несколько через запятую.',
     inputSchema: {
       query: z.string().min(1).max(400),
       region: z.string().optional().describe('Регион(ы): название или id Яндекса через запятую; пусто = все'),
@@ -151,6 +96,7 @@ server.registerTool(
     const mapRows = (rows?: Array<{ phrase: string; count: string }>) =>
       (rows ?? []).map((r) => ({ phrase: r.phrase, freq_broad: toNum(r.count) }));
 
+    const related = mapRows(broad.results);
     return jsonResult({
       query: args.query,
       exact_form: exact,
@@ -159,7 +105,9 @@ server.registerTool(
       period: 'последние 30 дней',
       freq_broad: toNum(broad.totalCount),
       freq_exact: toNum(exactRes.totalCount),
-      related: mapRows(broad.results),
+      related,
+      // relatedLimit строк не гарантирует, что выдано всё: >= лимита = возможно обрезано API
+      related_truncated: related.length >= args.relatedLimit,
       associations: mapRows(broad.associations),
     });
   }),
@@ -171,8 +119,8 @@ server.registerTool(
     description:
       'Динамика частотности фразы: { results: [{ date, count, share }] }. ' +
       'ВАЖНО: операторы («!», кавычки) работают только при period=daily; ' +
-      'monthly требует fromDate = 1-е число и toDate = последний день месяца, weekly — понедельник/воскресенье. ' +
-      'Данные weekly/monthly с 2018 года, daily — последние 60 дней.',
+      'monthly требует fromDate = 1-е число и toDate = последний день месяца, weekly — fromDate понедельник. ' +
+      'Данные weekly/monthly с 2018 года, daily — последние 60 дней. Даты валидируются до запроса.',
     inputSchema: {
       query: z.string().min(1).max(400),
       period: z.enum(['daily', 'weekly', 'monthly']).default('monthly'),
@@ -184,12 +132,13 @@ server.registerTool(
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .describe('YYYY-MM-DD'),
-      region: z.string().optional(),
-      device: z.string().optional(),
+      region: z.string().optional().describe('Регион(ы): название или id Яндекса через запятую; пусто = все'),
+      device: z.string().optional().describe('all | desktop | phone | tablet (можно через запятую)'),
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
+    validateDynamicsDates(args.period, args.fromDate, args.toDate);
     const regions = resolveRegionIds(args.region);
     const devices = resolveDevices(args.device);
     const body: Record<string, unknown> = {
@@ -216,11 +165,12 @@ server.registerTool(
   {
     description:
       'Распределение частотности фразы по регионам за 30 дней: { results: [{ region_id, region_name, count, share, affinityIndex }] }. ' +
-      'affinityIndex > 100 — интерес выше среднего по стране. regionType: cities | regions | all. Имена регионов резолвятся из дерева (кеш).',
+      'affinityIndex > 100 — интерес выше среднего по стране. regionType: cities | regions | all. Имена регионов резолвятся из дерева (кеш). ' +
+      'Первый вызов за сутки — 2 запроса к API (regions + дерево имён), далее 1.',
     inputSchema: {
       query: z.string().min(1).max(400),
       regionType: z.enum(['cities', 'regions', 'all']).default('regions'),
-      device: z.string().optional(),
+      device: z.string().optional().describe('all | desktop | phone | tablet (можно через запятую)'),
       limit: z.number().int().min(1).max(1000).default(50).describe('Топ-N регионов по count'),
       account: accountParam,
     },
@@ -233,15 +183,20 @@ server.registerTool(
     };
     if (devices) body.devices = devices;
 
+    // имена — «best effort»: их отсутствие не рушит частотность, но помечаем деградацию флагом
+    let namesResolved = true;
     const [data, names] = await Promise.all([
       wordstatPost<{ results?: Array<{ region: string; count: string; share: number; affinityIndex: number }> }>(
         'regions',
         body,
         args.account,
       ),
-      regionNames(args.account).catch(() => new Map<string, string>()), // имена — «best effort»: их отсутствие не рушит частотность
+      regionNames(args.account).catch(() => {
+        namesResolved = false;
+        return new Map<string, string>();
+      }),
     ]);
-    const results = (data.results ?? [])
+    const all = (data.results ?? [])
       .map((r) => ({
         region_id: r.region,
         region_name: names.get(String(r.region)) ?? null,
@@ -249,9 +204,16 @@ server.registerTool(
         share: r.share ?? null,
         affinityIndex: r.affinityIndex ?? null,
       }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, args.limit);
-    return jsonResult({ query: args.query, regionType: args.regionType, results });
+      .sort((a, b) => b.count - a.count);
+    const results = all.slice(0, args.limit);
+    return jsonResult({
+      query: args.query,
+      regionType: args.regionType,
+      total: all.length,
+      truncated: all.length > results.length, // true = выдано не всё, увеличь limit
+      region_names_resolved: namesResolved, // false = дерево имён не загрузилось, region_name=null
+      results,
+    });
   }),
 );
 

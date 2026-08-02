@@ -63,6 +63,8 @@ export function normSerpItem(it: any, i: number): SerpItem {
 export interface SerpResult {
   query: string;
   success: boolean;
+  /** Легитимная пустая выдача: запрос выполнен (success), но органики нет. */
+  empty: boolean;
   totalcount: number | null;
   misspell: string | null;
   count: number;
@@ -74,9 +76,9 @@ export interface SerpResult {
 
 /** Человекочитаемая причина пустой выдачи (капча/выжженные прокси) из info.stats. */
 function diagnose(r: any): string {
-  const stats = (r && r.info && r.info.stats) || {};
+  const stats = r?.info?.stats || {};
   const captcha = num(stats.reCaptchaShows);
-  const retries = num(stats.retries ?? (r && r.info && r.info.retries));
+  const retries = num(stats.retries ?? r?.info?.retries);
   if (captcha > 0) {
     return `Поисковик отдал reCaptcha (${captcha} показов за ${retries} ретраев), прокси её не решили — нужны свежие/качественные прокси или решатель капчи (Util::ReCaptcha2).`;
   }
@@ -94,6 +96,7 @@ export function parseSerpResult(result: any): SerpResult {
   const out: SerpResult = {
     query: queryString(r.query),
     success,
+    empty: success && serp.length === 0,
     totalcount: num(pick(r, ['totalcount', 'totalCount'])) || null,
     misspell: misspell || null,
     count: serp.length,
@@ -119,6 +122,38 @@ export function allResults(data: any): any[] {
   return data && Array.isArray(data.results) ? data.results : [];
 }
 
+/**
+ * Пояснение к results_present=false: «success, но results нет/пуст» — это НЕ легитимная
+ * пустая выдача (у неё всегда есть results[0] с пустым serp), а битый/неожиданный ответ API.
+ */
+export const NO_RESULTS_NOTE =
+  'A-Parser вернул success, но поле results отсутствует или пусто — это НЕ легитимная пустая выдача ' +
+  '(у пустой выдачи есть results[0] с пустым serp). Проверьте пресет и парсер (aparser_get_preset, aparser_parser_fields).';
+
+/** results есть и непуст? Отличает битый ответ API от легитимной пустой выдачи. */
+export function resultsPresent(data: any): boolean {
+  return !!(data && Array.isArray(data.results) && data.results.length > 0);
+}
+
+/** Маркер для ответа инструмента: results_present + note, когда results нет (без throw). */
+export function resultsMarker(data: any): { results_present: boolean; note?: string } {
+  return resultsPresent(data) ? { results_present: true } : { results_present: false, note: NO_RESULTS_NOTE };
+}
+
+/** SERP-парсеры, чьи результаты нормализуются parseSerpResult; остальные отдаются как есть. */
+export function isSerpParser(parser: string): boolean {
+  return /^SE::(Google|Yandex)$/.test(parser);
+}
+
+/**
+ * Результаты bulkRequest: нормализация parseSerpResult только для SE::Google/SE::Yandex —
+ * у остальных парсеров структура своя, parseSerpResult исказил бы её. raw=false — как есть.
+ */
+export function normalizeBulkResults(parser: string, results: any[], raw: boolean): any[] {
+  if (!raw || !isSerpParser(parser)) return results;
+  return results.map((r) => parseSerpResult(r));
+}
+
 /** Подсказка из объектного элемента (без алиаса link — URL подсказкой не является). */
 const suggestFromObjects = (arr: any[]): string[] =>
   arr.map((x: any) => str(typeof x === 'string' ? x : pick(x, ['suggest', 'anchor', 'keyword', 'text']))).filter(Boolean);
@@ -134,7 +169,7 @@ export function parseSuggest(result: any): string[] {
   if (Array.isArray(r.results)) {
     if (r.results.some((x: any) => x && typeof x === 'object')) return suggestFromObjects(r.results);
     // плоский скалярный [suggest, type, …]: числовые маркеры типа (в т.ч. строкой) отбрасываем
-    return r.results.map(str).filter((x) => x && !/^\d+$/.test(x));
+    return r.results.map(str).filter((x: string) => x && !/^\d+$/.test(x));
   }
   const raw = Array.isArray(r.suggest) ? r.suggest : Array.isArray(r.suggestions) ? r.suggestions : Array.isArray(r.serp) ? r.serp : [];
   return suggestFromObjects(raw);
@@ -189,9 +224,17 @@ export function parseProxies(data: any): ProxiesView {
   return { count: proxies.length, byType, proxies };
 }
 
+/** Потолок списка прокси в выводе инструмента: count — всегда полный, список обрезан. */
+export const PROXIES_CAP = 100;
+
+/** Обрезка списка прокси до cap с флагом truncated (count/byType — полные). */
+export function capProxies(view: ProxiesView, cap = PROXIES_CAP): ProxiesView & { truncated: boolean } {
+  return { ...view, truncated: view.proxies.length > cap, proxies: view.proxies.slice(0, cap) };
+}
+
 /** Ответ getParserInfo: какие поля парсер умеет вернуть ({arrays:{...}, flat:[...]}). */
 export function parseParserFields(data: any): { flat: string[]; arrays: string[] } {
-  const res = data && data.results ? data.results : {};
+  const res = data?.results || {};
   const arrays = res.arrays && typeof res.arrays === 'object' ? Object.keys(res.arrays) : [];
   const flat = Array.isArray(res.flat) ? res.flat.map(str) : [];
   return { flat, arrays };

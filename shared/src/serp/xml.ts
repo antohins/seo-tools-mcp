@@ -21,13 +21,64 @@ export function asArray<T>(v: T | T[] | undefined | null): T[] {
   return Array.isArray(v) ? v : [v];
 }
 
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&amp;/g, '&');
+// Именованные entities, встречающиеся в сниппетах выдачи. &amp; — тоже здесь:
+// замена однопроходная, поэтому «&amp;lt;» корректно даёт «&lt;», а не «<»
+// (порядок «amp последним» обеспечивается тем, что повторного прохода нет).
+const NAMED_ENTITIES: Record<string, string> = {
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: '\u00A0',
+  amp: '&',
+  mdash: '—',
+  ndash: '–',
+  laquo: '«',
+  raquo: '»',
+  hellip: '…',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  deg: '°',
+  plusmn: '±',
+  times: '×',
+  divide: '÷',
+  euro: '€',
+  pound: '£',
+  yen: '¥',
+  cent: '¢',
+  sect: '§',
+  middot: '·',
+  bull: '•',
+  dagger: '†',
+  Dagger: '‡',
+  permil: '‰',
+  prime: '′',
+  Prime: '″',
+  sbquo: '‚',
+  bdquo: '„',
+  lsquo: '‘',
+  rsquo: '’',
+  ldquo: '“',
+  rdquo: '”',
+  lsaquo: '‹',
+  rsaquo: '›',
+  minus: '−',
+  larr: '←',
+  rarr: '→',
+  harr: '↔',
+};
+
+/** Декодирует HTML-entities: именованные (из таблицы выше) и числовые (&#171; / &#x2026;). */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (m, body: string) => {
+    if (body.startsWith('#')) {
+      const code = body[1] === 'x' || body[1] === 'X' ? Number.parseInt(body.slice(2), 16) : Number.parseInt(body.slice(1), 10);
+      // валидный кодпоинт — декодируем; мусор вроде &#99999999; оставляем как есть
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+    }
+    return NAMED_ENTITIES[body] ?? m;
+  });
 }
 
 /**

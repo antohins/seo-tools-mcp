@@ -46,6 +46,12 @@ describe.skipIf(!LIVE)('live smoke (LIVE=1, нужны креды)', () => {
     expect(r.text).toMatch(/balance/i);
   });
 
+  it('xmlriver_balance (free) — авторизация + баланс', { timeout: 30_000 }, async () => {
+    const r = await callTool('xmlriver', 'xmlriver_balance');
+    expect(r.isError, r.text).toBe(false);
+    expect(r.text).toMatch(/balance/i);
+  });
+
   it('wordstat_frequency (free quota)', { timeout: 30_000 }, async () => {
     const r = await callTool('wordstat', 'wordstat_frequency', { query: 'кофе' });
     expect(r.isError, r.text).toBe(false);
@@ -64,5 +70,11 @@ describe.skipIf(!LIVE)('live smoke (LIVE=1, нужны креды)', () => {
   it('metrika_counters (free)', { timeout: 30_000 }, async () => {
     const r = await callTool('metrika', 'metrika_counters');
     expect(r.isError, r.text).toBe(false);
+  });
+
+  it('aparser_ping (free; нужен запущенный инстанс A-Parser)', { timeout: 30_000 }, async () => {
+    const r = await callTool('aparser', 'aparser_ping');
+    expect(r.isError, r.text).toBe(false);
+    expect(r.text).toMatch(/"ok":true/);
   });
 });

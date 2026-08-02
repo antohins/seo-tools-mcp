@@ -6,7 +6,81 @@
  *  - pagetype=regions:     { results:[{region,count,share,affinityIndex}] }
  *  - pagetype=regionsTree: { regions:[{id,label,children[]}] }
  * count/totalCount приходят строками — парсим в number.
+ * Здесь же HTTP-слой (wordstatGet), хелпер дат (wsDate), валидация порядка дат
+ * и per-account кэш имён регионов — вынесены из index.ts ради юнит-тестов.
  */
+import { CostLogger, fetchText, getConfig, requireEnv } from '@seo-tools/shared';
+
+export const WORDSTAT_URL = 'https://xmlstock.com/wordstat/json/';
+
+// Wordstat у XMLStock дороже SERP (~19 ₽/1K против ~12 ₽/1K) — отдельный счётчик расхода;
+// цена читается лениво из конфига — set_credentials применяется без перезапуска
+const wordstatCost = new CostLogger('xmlstock-wordstat', () => Number(getConfig('XMLSTOCK_WORDSTAT_PRICE_PER_CALL') || 0.019));
+
+/** GET к Wordstat XMLStock: JSON; ошибки приходят как { error: { code, message } }. */
+export async function wordstatGet(pagetype: string, params: Record<string, string | number | undefined>, account?: string): Promise<any> {
+  const user = requireEnv('XMLSTOCK_USER', account);
+  const key = requireEnv('XMLSTOCK_KEY', account);
+  const qs = new URLSearchParams({ user, key, pagetype });
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') qs.set(k, String(v));
+  }
+  const text = await fetchText(`${WORDSTAT_URL}?${qs}`, { timeoutMs: 60_000 });
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(
+      'XMLStock Wordstat вернул не JSON — вероятно неверные XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials / xmlstock_auth_status).',
+    );
+  }
+  const err = json?.error;
+  if (err) {
+    const code = Number(err?.code ?? 0);
+    const message = String(err?.message ?? '');
+    if (code === 100 || code === 200 || /key|user|auth|ключ|доступ|access/i.test(message)) {
+      throw new Error(`XMLStock Wordstat error ${code}: ${message}. Проверьте XMLSTOCK_USER/XMLSTOCK_KEY (xmlstock_set_credentials).`);
+    }
+    throw new Error(`XMLStock Wordstat error ${code}: ${message}`);
+  }
+  wordstatCost.track('wordstat');
+  return json;
+}
+
+/** Валидация порядка дат dynamics ДО платного запроса (образец — validateDynamicsDates сервера wordstat). */
+export function validateWsDateOrder(from: string, to: string): void {
+  if (from > to) throw new Error(`from (${from}) позже to (${to}) — поменяй даты местами`);
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+/** YYYY-MM-DD → DD.MM.YYYY. Для period=month снапаем start→01, end→последний день месяца (иначе XMLStock code 7). */
+export function wsDate(iso: string, opts?: { startOfMonth?: boolean; endOfMonth?: boolean }): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso; // не наш формат — отдадим как есть, XMLStock сам отвалидирует
+  const [, y, mo] = m;
+  let d = m[3];
+  if (opts?.startOfMonth) d = '01';
+  if (opts?.endOfMonth) d = pad2(new Date(Number(y), Number(mo), 0).getDate());
+  return `${d}.${mo}.${y}`;
+}
+
+/**
+ * Per-account кэш дерева регионов (id→имя), TTL 24ч — обогащаем ответ regions именами.
+ * Кэшируется и in-flight промис (внутри createRegionNamesCache): параллельные вызовы
+ * не плодят лишние платные запросы дерева.
+ */
+export function createWsRegionNames(fetchTree: (account?: string) => Promise<any>): (account?: string) => Promise<Map<string, string>> {
+  const byAccount = new Map<string, ReturnType<typeof createRegionNamesCache>>();
+  return (account?: string) => {
+    const acc = account || '';
+    let loader = byAccount.get(acc);
+    if (!loader) {
+      loader = createRegionNamesCache(() => fetchTree(account));
+      byAccount.set(acc, loader);
+    }
+    return loader();
+  };
+}
 
 const num = (v: unknown): number => Number(String(v ?? '').replace(/\s/g, '')) || 0;
 
@@ -95,4 +169,28 @@ export function regionNameMap(json: any): Map<string, string> {
   const m = new Map<string, string>();
   for (const r of flattenRegionsTree(json)) m.set(r.id, r.name);
   return m;
+}
+
+/**
+ * Кэш дерева регионов с дедупликацией in-flight запроса: без него два параллельных
+ * вызова при холодном кэше уходят в два ПЛАТНЫХ запроса regionsTree. Кэшируем промис,
+ * а не только результат; по TTL кэш перечитывается.
+ */
+export function createRegionNamesCache(fetchTree: () => Promise<any>, ttlMs = 24 * 60 * 60 * 1000): () => Promise<Map<string, string>> {
+  let cached: { names: Map<string, string>; ts: number } | null = null;
+  let inflight: Promise<Map<string, string>> | null = null;
+  return async () => {
+    if (cached && Date.now() - cached.ts < ttlMs) return cached.names;
+    if (inflight) return inflight;
+    inflight = fetchTree()
+      .then((json) => {
+        const names = regionNameMap(json);
+        cached = { names, ts: Date.now() };
+        return names;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+    return inflight;
+  };
 }

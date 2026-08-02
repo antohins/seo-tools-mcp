@@ -13,123 +13,39 @@
  * пачки на запуск задаётся в пресете полем proxyChecker (дефолт "*" = все); per-request
  * её переопределяем через checkers. Формат/ключи override и поля serp[] сверены на
  * живом инстансе A-Parser v1.2.3527.
+ *
+ * Здесь — только регистрация инструментов; сеть и сборка опций — client.ts,
+ * чистые парсеры ответов — parse.ts (оба покрыты юнит-тестами).
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  accountParam,
-  fetchText,
-  getConfig,
-  jsonResult,
-  loadSharedEnv,
-  registerAuthTools,
-  requireEnv,
-  resolveRegionId,
-  safeHandler,
-} from '@seo-tools/shared';
+import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, resolveRegionId, safeHandler } from '@seo-tools/shared';
 import { z } from 'zod';
 import {
+  aparserCall,
+  buildOverrides,
+  ensureProxies,
+  getLiveProxies,
+  maskPresetOptions,
+  PROXY_CHECKER_OVERRIDE_ID,
+  resolveExec,
+} from './client.js';
+import {
   allResults,
+  capProxies,
   firstResult,
   type InstanceInfo,
-  type ProxiesView,
+  normalizeBulkResults,
   parseInfo,
   parseParserFields,
-  parseProxies,
   parseSerpResult,
   parseSuggest,
+  resultsMarker,
 } from './parse.js';
 
 loadSharedEnv();
 
-/** Ключ выбора прокси-чекера (пачки) в override-опциях; сверено с пресетом (дефолт "*"). */
-const PROXY_CHECKER_OVERRIDE_ID = 'proxyChecker';
-
-/** POST к A-Parser API: {action,password,data}; success!==1 → осмысленная ошибка. */
-async function aparserCall(action: string, data: Record<string, unknown>, account?: string): Promise<any> {
-  const base = requireEnv('APARSER_URL', account);
-  const password = requireEnv('APARSER_PASSWORD', account);
-  const payload: Record<string, unknown> = { action, password };
-  if (data && Object.keys(data).length) payload.data = data;
-
-  const text = await fetchText(base, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
-    body: JSON.stringify(payload),
-    timeoutMs: 120_000,
-  });
-
-  let json: any;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(
-      `A-Parser вернул не JSON (${text.slice(0, 120)}). Проверьте APARSER_URL — он должен указывать на эндпоинт …/API, а API-сервер быть включён (Settings → API). aparser_auth_status.`,
-    );
-  }
-  if (!json || json.success !== 1) {
-    const msg = String((json && (json.msg || json.message || (json.data && json.data.msg))) || 'неизвестная ошибка');
-    if (/pass|denied|access|auth|доступ|парол/i.test(msg)) {
-      throw new Error(`A-Parser: доступ отклонён (${msg}). Проверьте APARSER_PASSWORD (aparser_set_credentials).`);
-    }
-    throw new Error(`A-Parser error: ${msg}`);
-  }
-  return json.data;
-}
-
-/** Дефолтные прокси-пачки из env (APARSER_PROXY_CHECKERS="a,b"). */
-function defaultCheckers(account?: string): string[] | undefined {
-  const v = getConfig('APARSER_PROXY_CHECKERS', account);
-  if (!v) return undefined;
-  const list = v
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return list.length ? list : undefined;
-}
-
-/** Дефолт use_proxy (APARSER_USE_PROXY), по умолчанию true. */
-function defaultUseProxy(account?: string): boolean {
-  const v = getConfig('APARSER_USE_PROXY', account);
-  if (v == null || v === '') return true;
-  return /^(1|true|yes|on)$/i.test(v);
-}
-
-/** Живые прокси инстанса (опц. только указанных пачек). */
-async function getLiveProxies(checkers: string[] | undefined, account?: string): Promise<ProxiesView> {
-  const data = await aparserCall('getProxies', checkers && checkers.length ? { checkers } : {}, account);
-  return parseProxies(data);
-}
-
-/**
- * Сборка override-опций A-Parser (формат элемента — {type:'override',id,value}).
- * Пропускает undefined. useproxy и выбор прокси-чекера включены сюда.
- */
-function buildOverrides(
-  map: Record<string, string | number | boolean | undefined>,
-): Array<{ type: 'override'; id: string; value: string }> {
-  const out: Array<{ type: 'override'; id: string; value: string }> = [];
-  for (const [id, value] of Object.entries(map)) {
-    if (value === undefined || value === '') continue;
-    out.push({ type: 'override', id, value: typeof value === 'boolean' ? (value ? '1' : '0') : String(value) });
-  }
-  return out;
-}
-
-/** Preflight для SERP: при use_proxy проверяем, что в выбранных пачках есть живые прокси. */
-async function ensureProxies(useProxy: boolean, checkers: string[] | undefined, account?: string): Promise<void> {
-  if (!useProxy) return;
-  const { count } = await getLiveProxies(checkers, account);
-  if (count === 0) {
-    const where = checkers && checkers.length ? `в пачках [${checkers.join(', ')}]` : 'ни в одной пачке';
-    throw new Error(
-      `A-Parser: живых прокси ${where} нет — SERP по Google/Яндексу почти наверняка забанится. ` +
-        `Загрузите прокси и запустите Proxy Checker в GUI, либо укажите use_proxy=false на свой риск. aparser_proxies — текущее состояние.`,
-    );
-  }
-}
-
-const server = new McpServer({ name: 'aparser', version: '1.0.0' });
+const server = new McpServer({ name: 'aparser', version: '1.3.0' });
 
 registerAuthTools(
   server,
@@ -168,7 +84,8 @@ server.registerTool(
   {
     description:
       'Вердикт готовности A-Parser: версия, число установленных парсеров, очередь/потоки (info) + суммарно живых прокси (getProxies). ' +
-      'ready=false, если живых прокси 0 — SERP работать не будет, нужно поднять Proxy Checker в GUI.',
+      'ready=false, если живых прокси 0 — SERP через прокси работать не будет: поднимите Proxy Checker в GUI ' +
+      '(либо serp-инструменты допускают use_proxy=false на свой риск).',
     inputSchema: { account: accountParam },
   },
   safeHandler(async (args) => {
@@ -196,14 +113,15 @@ server.registerTool(
   {
     description:
       'Живые (проверенные) прокси на инстансе A-Parser (метод getProxies). checkers — имена прокси-пачек (proxy checkers); ' +
-      'без них — по всем пачкам. Возвращает { count, byType, proxies:[{address,type}] }. Логины/пароли прокси НЕ выводятся.',
+      'без них — по всем пачкам. Возвращает { count, byType, truncated, proxies:[{address,type}] }: count — полное число живых, ' +
+      'список обрезан до 100 (truncated=true). Логины/пароли прокси НЕ выводятся.',
     inputSchema: {
       checkers: z.array(z.string()).optional().describe('Имена прокси-пачек (proxy checkers). Пусто = все пачки.'),
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
-    const view = await getLiveProxies(args.checkers, args.account);
+    const view = capProxies(await getLiveProxies(args.checkers, args.account));
     return jsonResult({ checkers: args.checkers ?? null, ...view });
   }),
 );
@@ -243,7 +161,8 @@ server.registerTool(
   {
     description:
       'Прочитать опции готового config-пресета парсера (метод getParserPreset): useproxy, домен, hl/gl, device, выбор прокси-чекеров и т.д. ' +
-      'Помогает переиспользовать/подправить существующую настройку. preset по умолчанию — default.',
+      'Помогает переиспользовать/подправить существующую настройку. preset по умолчанию — default. ' +
+      'Значения чувствительных опций (pass|key|token|secret) маскируются.',
     inputSchema: {
       parser: z.string().min(1).describe('Идентификатор парсера, напр. SE::Google'),
       preset: z.string().default('default').describe('Имя пресета из GUI (по умолчанию default)'),
@@ -252,7 +171,7 @@ server.registerTool(
   },
   safeHandler(async (args) => {
     const data = await aparserCall('getParserPreset', { parser: args.parser, preset: args.preset }, args.account);
-    return jsonResult({ parser: args.parser, preset: args.preset, options: data ?? null });
+    return jsonResult({ parser: args.parser, preset: args.preset, options: maskPresetOptions(data ?? null) });
   }),
 );
 
@@ -267,23 +186,18 @@ const execInput = {
   account: accountParam,
 };
 
-/** Разрешить пресет/пачки/use_proxy из аргументов с фолбэком на env-дефолты. */
-function resolveExec(args: any, presetEnv: string): { preset: string; checkers: string[] | undefined; useProxy: boolean } {
-  const preset = args.preset || getConfig(presetEnv, args.account) || 'default';
-  const checkers = args.checkers && args.checkers.length ? args.checkers : defaultCheckers(args.account);
-  const useProxy = args.use_proxy ?? defaultUseProxy(args.account);
-  return { preset, checkers, useProxy };
-}
-
 server.registerTool(
   'aparser_serp_google',
   {
     description:
       'Органическая выдача Google через ваш A-Parser (парсер SE::Google, синхронно). Прокси по умолчанию включены + preflight-проверка живых прокси. ' +
-      'Возвращает { serp:[{position,url,anchor,snippet,flags}], related, ads, totalcount }.',
+      'Возвращает { serp:[{position,url,anchor,snippet,flags}], related, ads, totalcount, success, empty, results_present }. ' +
+      'Смотрите success/diagnostic: success=false + diagnostic — капча или выжженные прокси (нужны свежие); ' +
+      'empty=true — легитимная пустая выдача; results_present=false — битый ответ API (note с пояснением). ' +
+      'Каждая страница pages — отдельный заход к поисковику: pages>1 заметно дольше и быстрее выжигает прокси.',
     inputSchema: {
       query: z.string().min(1),
-      pages: z.number().int().min(1).max(10).default(1).describe('Сколько страниц выдачи собрать'),
+      pages: z.number().int().min(1).max(10).default(1).describe('Сколько страниц выдачи собрать (каждая — отдельный заход, дольше)'),
       domain: z.string().optional().describe('Домен Google (google.com/google.ru…)'),
       hl: z.string().optional().describe('Язык интерфейса (hl)'),
       gl: z.string().optional().describe('Страна поиска (gl)'),
@@ -306,7 +220,7 @@ server.registerTool(
       { parser: 'SE::Google', preset, query: args.query, rawResults: 1, doLog: 0, options },
       args.account,
     );
-    return jsonResult({ ...parseSerpResult(firstResult(data)), query: args.query, engine: 'google', preset });
+    return jsonResult({ ...resultsMarker(data), ...parseSerpResult(firstResult(data)), query: args.query, engine: 'google', preset });
   }),
 );
 
@@ -315,7 +229,9 @@ server.registerTool(
   {
     description:
       'Органическая выдача Яндекса через ваш A-Parser (парсер SE::Yandex, синхронно). region — «Москва»/«Россия»/213 (id региона Яндекса, lr). ' +
-      'Прокси по умолчанию включены + preflight. Возвращает { serp:[{position,url,anchor,snippet}], related, totalcount }.',
+      'Прокси по умолчанию включены + preflight. Возвращает { serp:[{position,url,anchor,snippet}], related, ads, totalcount, success, empty, results_present }. ' +
+      'Смотрите success/diagnostic: success=false + diagnostic — капча или выжженные прокси; empty=true — легитимная пустая выдача; ' +
+      'results_present=false — битый ответ API (note с пояснением). pages>1 — дольше и быстрее выжигает прокси.',
     inputSchema: {
       query: z.string().min(1),
       pages: z.number().int().min(1).max(10).default(1),
@@ -338,7 +254,14 @@ server.registerTool(
       { parser: 'SE::Yandex', preset, query: args.query, rawResults: 1, doLog: 0, options },
       args.account,
     );
-    return jsonResult({ ...parseSerpResult(firstResult(data)), query: args.query, engine: 'yandex', region: args.region, preset });
+    return jsonResult({
+      ...resultsMarker(data),
+      ...parseSerpResult(firstResult(data)),
+      query: args.query,
+      engine: 'yandex',
+      region: args.region,
+      preset,
+    });
   }),
 );
 
@@ -346,7 +269,9 @@ server.registerTool(
   'aparser_suggest',
   {
     description:
-      'Поисковые подсказки Google/Яндекса через A-Parser (парсеры SE::Google::Suggest / SE::Yandex::Suggest). Возвращает список фраз.',
+      'Поисковые подсказки Google/Яндекса через A-Parser (парсеры SE::Google::Suggest / SE::Yandex::Suggest). Возвращает список фраз. ' +
+      'Прокси по умолчанию включены + preflight-проверка живых прокси (suggest тоже банится без них). ' +
+      'results_present=false — API вернул success без results (битый ответ, НЕ пустой список подсказок; см. note).',
     inputSchema: {
       query: z.string().min(1),
       engine: z.enum(['google', 'yandex']).default('yandex'),
@@ -356,10 +281,11 @@ server.registerTool(
   safeHandler(async (args) => {
     const parser = args.engine === 'google' ? 'SE::Google::Suggest' : 'SE::Yandex::Suggest';
     const { preset, checkers, useProxy } = resolveExec(args, args.engine === 'google' ? 'APARSER_GOOGLE_PRESET' : 'APARSER_YANDEX_PRESET');
+    await ensureProxies(useProxy, checkers, args.account);
     const options = buildOverrides({ useproxy: useProxy, [PROXY_CHECKER_OVERRIDE_ID]: checkers ? checkers.join(',') : undefined });
     const data = await aparserCall('oneRequest', { parser, preset, query: args.query, rawResults: 1, doLog: 0, options }, args.account);
     const suggestions = parseSuggest(firstResult(data));
-    return jsonResult({ query: args.query, engine: args.engine, count: suggestions.length, suggestions });
+    return jsonResult({ ...resultsMarker(data), query: args.query, engine: args.engine, count: suggestions.length, suggestions });
   }),
 );
 
@@ -369,6 +295,8 @@ server.registerTool(
     description:
       'Универсальный синхронный запрос к любому парсеру A-Parser (метод oneRequest). Для парсеров, под которые нет типизированного инструмента. ' +
       'options — массив override-опций A-Parser (как есть). raw=true (по умолчанию) → структурированный результат; false → форматированная строка пресета. ' +
+      'Env-дефолты serp-инструментов (APARSER_*_PRESET, APARSER_PROXY_CHECKERS, APARSER_USE_PROXY) тут НЕ действуют — ' +
+      'пресет и опции задаются только параметрами вызова. results_present=false (raw=true) — API вернул success без results (битый ответ, см. note). ' +
       'Структуру полей парсера смотрите через aparser_parser_fields.',
     inputSchema: {
       parser: z.string().min(1).describe('Идентификатор парсера, напр. SE::Yandex::Wordstat, Net::HTTP, SE::Bing'),
@@ -393,7 +321,14 @@ server.registerTool(
       args.account,
     );
     const result = args.raw ? firstResult(data) : (data?.resultString ?? null);
-    return jsonResult({ parser: args.parser, query: args.query, preset: args.preset, raw: args.raw, result });
+    return jsonResult({
+      ...(args.raw ? resultsMarker(data) : {}),
+      parser: args.parser,
+      query: args.query,
+      preset: args.preset,
+      raw: args.raw,
+      result,
+    });
   }),
 );
 
@@ -402,7 +337,10 @@ server.registerTool(
   {
     description:
       'Пакетный синхронный запрос: один парсер, много запросов в несколько потоков (метод bulkRequest). Синхронно — держите объём разумным (лимит 200 запросов). ' +
-      'Для больших выгрузок нужна очередь задач (кандидат в v2). Возвращает результаты по каждому запросу.',
+      'Один HTTP-вызов до 120 с БЕЗ ретраев: при таймауте уменьшите число queries или threads и повторите — сам запрос при этом мог выполниться на инстансе. ' +
+      'raw=true: для SE::Google/SE::Yandex результаты нормализуются ({ serp, related, ads, success, … }), для остальных парсеров отдаются как есть; ' +
+      'raw=false — resultString пресета. count < requested — часть запросов не выполнена (см. note в ответе). ' +
+      'Для больших выгрузок нужна очередь задач (кандидат в v2).',
     inputSchema: {
       parser: z.string().min(1),
       queries: z.array(z.string().min(1)).min(1).max(200).describe('Список запросов (до 200 за вызов)'),
@@ -414,6 +352,7 @@ server.registerTool(
     },
   },
   safeHandler(async (args) => {
+    // тяжёлый синхронный bulk не ретраим: повтор удвоил бы нагрузку на инстанс и прокси
     const data = await aparserCall(
       'bulkRequest',
       {
@@ -426,13 +365,19 @@ server.registerTool(
         ...(args.options ? { options: args.options } : {}),
       },
       args.account,
+      { attempts: 1, timeoutMs: 120_000 },
     );
     const results = allResults(data);
     return jsonResult({
       parser: args.parser,
       requested: args.queries.length,
       count: results.length,
-      results: args.raw ? results.map((r) => parseSerpResult(r)) : results,
+      ...(results.length < args.queries.length
+        ? {
+            note: `A-Parser вернул результатов меньше, чем запрошено (${results.length} из ${args.queries.length}) — часть запросов не выполнена (капчи/прокси/таймаут).`,
+          }
+        : {}),
+      results: normalizeBulkResults(args.parser, results, args.raw),
     });
   }),
 );

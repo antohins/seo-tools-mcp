@@ -79,10 +79,11 @@ describe('parseSerpResult', () => {
     expect(r.success).toBe(false);
     expect(r.diagnostic).toMatch(/reCaptcha/i);
   });
-  it('пустой/битый результат → безопасные значения без diagnostic', () => {
+  it('пустой/битый результат → безопасные значения, empty=true (success без органики), без diagnostic', () => {
     expect(parseSerpResult(null)).toEqual({
       query: '',
       success: true,
+      empty: true,
       totalcount: null,
       misspell: null,
       count: 0,
@@ -90,6 +91,10 @@ describe('parseSerpResult', () => {
       related: [],
       ads: [],
     });
+  });
+  it('empty=false при непустой выдаче и при success=false', () => {
+    expect(parseSerpResult({ success: 1, serp: [{ link: 'https://x.ru' }] }).empty).toBe(false);
+    expect(parseSerpResult({ success: 0, serp: [] }).empty).toBe(false);
   });
 });
 

@@ -11,10 +11,11 @@ function fakeSource(total: number) {
 }
 
 describe('collectRows (gsc пагинация + truncated)', () => {
-  it('данных больше лимита → truncated=true, ровно limit строк', async () => {
+  it('данных больше лимита → truncated=true (by limit), ровно limit строк', async () => {
     const r = await collectRows(fakeSource(100_000), 5000, 25_000);
     expect(r.rows).toHaveLength(5000);
     expect(r.truncated).toBe(true);
+    expect(r.truncatedBy).toBe('limit');
   });
 
   it('данных меньше лимита → truncated=false', async () => {
@@ -47,7 +48,7 @@ describe('collectRows (gsc пагинация + truncated)', () => {
     expect(r.truncated).toBe(false);
   });
 
-  it('общий дедлайн обрывает пагинацию с truncated=true', async () => {
+  it('общий дедлайн обрывает пагинацию с truncated=true (by deadline)', async () => {
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
     // источник «бесконечный», каждая страница медленная — без дедлайна цикл шёл бы долго
     const slow = async (rowLimit: number, startRow: number): Promise<number[]> => {
@@ -56,6 +57,7 @@ describe('collectRows (gsc пагинация + truncated)', () => {
     };
     const r = await collectRows(slow, 1_000_000, 5, 5); // deadlineMs=5 < время первой страницы (~20мс)
     expect(r.truncated).toBe(true);
+    expect(r.truncatedBy).toBe('deadline');
     expect(r.rows.length).toBeLessThan(1_000_000); // оборвались рано
   });
 });

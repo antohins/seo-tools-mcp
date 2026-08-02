@@ -31,6 +31,27 @@
           "format": "string",
           "isRequired": false,
           "isSecret": false
+        },
+        {
+          "name": "METRIKA_OAUTH_TOKEN",
+          "description": "Dedicated Metrica token (overrides the shared one; usually not needed).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "YANDEX_CLIENT_ID",
+          "description": "Yandex OAuth app client ID (for interactive auth and token refresh).",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "YANDEX_CLIENT_SECRET",
+          "description": "Yandex OAuth app client secret.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
         }
       ]
     }

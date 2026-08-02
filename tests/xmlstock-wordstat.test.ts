@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { flattenRegionsTree, parseHistory, parseRegions, parseWords, regionNameMap } from '../servers/xmlstock/src/wordstat.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  createRegionNamesCache,
+  createWsRegionNames,
+  flattenRegionsTree,
+  parseHistory,
+  parseRegions,
+  parseWords,
+  regionNameMap,
+  validateWsDateOrder,
+  wsDate,
+} from '../servers/xmlstock/src/wordstat.js';
 
 describe('parseWords', () => {
   it('парсит топ + ассоциации, count из строк в числа', () => {
@@ -68,5 +78,76 @@ describe('flattenRegionsTree / regionNameMap', () => {
   });
   it('пустое дерево → []', () => {
     expect(flattenRegionsTree({})).toEqual([]);
+  });
+});
+
+describe('createRegionNamesCache', () => {
+  const tree = { regions: [{ id: '225', label: 'Россия' }] };
+
+  it('два параллельных вызова при холодном кэше → ОДИН fetch (дедуп in-flight)', async () => {
+    const fetchTree = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 5)); // имитация сети: второй вызов приходит, пока первый в полёте
+      return tree;
+    });
+    const getNames = createRegionNamesCache(fetchTree);
+    const [a, b] = await Promise.all([getNames(), getNames()]);
+    expect(fetchTree).toHaveBeenCalledTimes(1);
+    expect(a.get('225')).toBe('Россия');
+    expect(b).toBe(a); // один и тот же результат
+  });
+
+  it('повторный вызов в пределах TTL — из кэша, без fetch', async () => {
+    const fetchTree = vi.fn(async () => tree);
+    const getNames = createRegionNamesCache(fetchTree);
+    await getNames();
+    const names = await getNames();
+    expect(fetchTree).toHaveBeenCalledTimes(1);
+    expect(names.get('225')).toBe('Россия');
+  });
+
+  it('ошибка fetch не кэшируется — следующий вызов ретраит', async () => {
+    const fetchTree = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(tree);
+    const getNames = createRegionNamesCache(fetchTree);
+    await expect(getNames()).rejects.toThrow('boom');
+    const names = await getNames();
+    expect(names.get('225')).toBe('Россия');
+    expect(fetchTree).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('wsDate', () => {
+  it('YYYY-MM-DD → DD.MM.YYYY', () => {
+    expect(wsDate('2026-07-05')).toBe('05.07.2026');
+  });
+  it('month: start → 01, end → последний день месяца (включая февраль високосного)', () => {
+    expect(wsDate('2026-07-15', { startOfMonth: true })).toBe('01.07.2026');
+    expect(wsDate('2026-07-15', { endOfMonth: true })).toBe('31.07.2026');
+    expect(wsDate('2024-02-10', { endOfMonth: true })).toBe('29.02.2024');
+    expect(wsDate('2026-02-10', { endOfMonth: true })).toBe('28.02.2026');
+  });
+  it('не-ISO строка возвращается как есть', () => {
+    expect(wsDate('05.07.2026')).toBe('05.07.2026');
+  });
+});
+
+describe('validateWsDateOrder', () => {
+  it('from > to → понятная ошибка; from <= to — ок', () => {
+    expect(() => validateWsDateOrder('2026-08-01', '2026-07-01')).toThrow(/from \(2026-08-01\) позже to \(2026-07-01\)/);
+    expect(() => validateWsDateOrder('2026-07-01', '2026-08-01')).not.toThrow();
+    expect(() => validateWsDateOrder('2026-07-01', '2026-07-01')).not.toThrow();
+  });
+});
+
+describe('createWsRegionNames', () => {
+  const tree = { regions: [{ id: '225', label: 'Россия' }] };
+
+  it('per-account кэши: разные аккаунты — разные fetch, повтор в пределах TTL — из кэша', async () => {
+    const fetchTree = vi.fn(async (_account?: string) => tree);
+    const getNames = createWsRegionNames(fetchTree);
+    await getNames();
+    await getNames(); // кэш основного аккаунта
+    await getNames('client1');
+    expect(fetchTree).toHaveBeenCalledTimes(2);
+    expect(fetchTree.mock.calls[1][0]).toBe('client1');
   });
 });

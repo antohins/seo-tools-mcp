@@ -9,7 +9,7 @@
 
 **Русский** | [English](README.en.md)
 
-Шесть **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру и Яндекс.Метрике прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
+Семь **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру, Яндекс.Метрике и self-hosted A-Parser прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
 
 > 🛰 Эти серверы мы используем в продакшене в **[PBN Workers](https://pbn-workers.com/ru/tools/seo-tools-mcp/)** — инфраструктура поискового топа: семантика, PBN и сателлиты, автоматизация SEO. Нужен стабильный органический трафик — [приходите](https://pbn-workers.com/ru/tools/seo-tools-mcp/).
 
@@ -21,6 +21,7 @@
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (авто-refresh) |
+| `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (URL + пароль API) |
 
 У каждого сервера дополнительно есть auth-инструменты `<server>_auth_status` и `<server>_set_credentials` (см. [Интерактивная авторизация](#интерактивная-авторизация-в-любой-сессии)).
 
@@ -40,7 +41,7 @@
 > Wordstat через XMLStock — тем же ключом `XMLSTOCK_*`, что и SERP; **не нужен Yandex Cloud** (в отличие от отдельного сервера `wordstat`).
 
 ### xmlriver — SERP Google/Яндекс + проверка индексации
-- `xmlriver_serp` — органика Google/Яндекса, глубина одним запросом (groupby до 100), флаг наличия AI Overview
+- `xmlriver_serp` — органика Google/Яндекса (глубина добирается пагинацией: каждые 10 позиций = 1 платный запрос), флаг наличия AI Overview
 - `xmlriver_images` — картинки Google (страница + url картинки + заголовок + источник + размеры)
 - `xmlriver_news` — новости Google (заголовок, источник, дата, сниппет), фильтр по времени
 - `xmlriver_check_index` — проверка индексации URL в Google/Яндексе (`inindex`)
@@ -60,10 +61,12 @@
 - `gsc_list_sitemaps` — отправленные sitemap со статусом
 - `gsc_get_sitemap` — детали одного sitemap
 
+Даты Search Analytics — по Pacific Time (не МСК); история ~16 месяцев; финальные данные отстают на ~2-3 дня (свежие — `dataState=all`); `ctr` в ответе — доля 0..1.
+
 ### ywm — Яндекс.Вебмастер
 - `ywm_hosts` — id пользователя + подтверждённые сайты
 - `ywm_summary` — ИКС, страниц в поиске, исключено, проблемы сайта по важности
-- `ywm_search_queries` — аналитика запросов по URL (~2 недели)
+- `ywm_search_queries` — аналитика запросов по URL (~2 недели по умолчанию; переопределяется dateFrom/dateTo)
 - `ywm_queries_history` — суммарные показы/клики/позиции по времени
 - `ywm_recommended_queries` — приближённые рекомендованные запросы (спрос + недобор кликов)
 - `ywm_popular` — популярные запросы хоста
@@ -87,6 +90,21 @@
 - `metrika_search_phrases` — поисковые фразы (органика)
 - `metrika_top_landings` — топ органических посадочных
 
+### aparser — мост к self-hosted A-Parser
+- `aparser_ping` — проверка связи с инстансом и пароля API
+- `aparser_status` — вердикт готовности: версия, установленные парсеры, очередь, живые прокси
+- `aparser_proxies` — живые прокси инстанса (можно по пачкам proxy checkers; креды прокси не выводятся)
+- `aparser_parsers` — парсеры, установленные на инстансе
+- `aparser_parser_fields` — поля результата, которые умеет вернуть парсер (flat + arrays)
+- `aparser_get_preset` — опции config-пресета парсера (чувствительные значения маскируются)
+- `aparser_serp_google` — органика Google (парсер `SE::Google`); прокси по умолчанию + preflight живых прокси
+- `aparser_serp_yandex` — органика Яндекса (`SE::Yandex`); регион через `lr`
+- `aparser_suggest` — поисковые подсказки Google/Яндекса
+- `aparser_request` — универсальный синхронный запрос к любому парсеру (`oneRequest`)
+- `aparser_bulk_request` — пакетный запрос: один парсер, много запросов в N потоков (`bulkRequest`)
+
+> Нужен **свой** запущенный инстанс [A-Parser](https://a-parser.com) (лицензия + сервер): мост им управляет, но не хостит и не проксирует его. Прокси и прокси-чекеры (пачки) настраиваются один раз в GUI A-Parser — мост их читает, проверяет (preflight) и выбирает (`checkers`), но не создаёт. v1 синхронный и read-only: очередь задач и большие асинхронные выгрузки не подключены.
+
 ## Быстрый старт
 
 ### Вариант А — через npx (без клонирования)
@@ -100,6 +118,7 @@ claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
 claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
 claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
 claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
+claude mcp add aparser  --scope user -- npx -y seo-tools-mcp-aparser
 ```
 
 #### Нужен только один сервер?
@@ -114,6 +133,7 @@ claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 | [`seo-tools-mcp-gsc`](https://www.npmjs.com/package/seo-tools-mcp-gsc) | Google Search Console |
 | [`seo-tools-mcp-ywm`](https://www.npmjs.com/package/seo-tools-mcp-ywm) | Яндекс.Вебмастер |
 | [`seo-tools-mcp-metrika`](https://www.npmjs.com/package/seo-tools-mcp-metrika) | Яндекс.Метрика |
+| [`seo-tools-mcp-aparser`](https://www.npmjs.com/package/seo-tools-mcp-aparser) | мост к self-hosted A-Parser |
 
 ```bash
 # добавить один сервер в Claude Code
@@ -145,7 +165,7 @@ XMLSTOCK_USER=... XMLSTOCK_KEY=... npx -y seo-tools-mcp-xmlstock
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
 ROOT=$(pwd)
-for s in xmlstock xmlriver wordstat gsc ywm metrika; do
+for s in xmlstock xmlriver wordstat gsc ywm metrika aparser; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```
@@ -256,9 +276,18 @@ claude mcp add metrika  --scope user -- node $ROOT/servers/metrika/dist/index.js
 
 Ограничения API Яндекса (не баги серверов): фильтр по URL в Вебмастере есть только в query-analytics (данные ~2 недели); эндпоинта «рекомендованные запросы» в API v4 нет — `ywm_recommended_queries` аппроксимирует через спрос (DEMAND) + недобор кликов; поисковые фразы в Метрике в основном «Не определено» (шифрование).
 
+### A-Parser (self-hosted) — SERP и сотни парсеров через свою коробку
+
+1. Свой запущенный инстанс [A-Parser](https://a-parser.com) (лицензия + сервер) — мост им управляет, но не хостит и не проксирует его.
+2. В A-Parser: **Settings → API** — включить API-сервер, запомнить порт (обычно 9091) и пароль.
+3. `APARSER_URL` = `http://<IP-инстанса>:<порт>/API` (обязательно с путём `/API`), `APARSER_PASSWORD` = пароль оттуда же → `aparser_set_credentials`.
+4. Проверка: `aparser_ping`, затем `aparser_status` (готовность инстанса + живые прокси).
+
+Нюансы: прокси и прокси-чекеры (пачки) настраиваются один раз в GUI — без живых прокси Google/Яндекс быстро банят, поэтому serp/suggest-инструменты делают preflight и предупреждают (`use_proxy=false` — на свой риск); пресеты и пачки по умолчанию задаются env (`APARSER_GOOGLE_PRESET`, `APARSER_YANDEX_PRESET`, `APARSER_PROXY_CHECKERS`, `APARSER_USE_PROXY`); v1 синхронный и read-only — очередь задач и мутирующие методы API не подключены.
+
 ## Формат дат и регионы
 
-Даты — `YYYY-MM-DD` (МСК). Регионы (в `xmlstock_serp`, Wordstat и др.): имя из встроенного списка частых регионов («Москва», «спб», «Казахстан»…), несколько через запятую, **или** числовой id региона Яндекса (`213`, `225`…) — числовой id работает всегда. Полный справочник id — инструмент `wordstat_regions_tree`.
+Даты — `YYYY-MM-DD` (МСК). Регионы: имя из встроенного списка частых регионов («Москва», «спб», «Казахстан»…) **или** числовой id региона Яндекса (`213`, `225`…) — числовой id работает всегда. Несколько регионов через запятую поддерживает только сервер `wordstat`; SERP-инструменты `xmlstock_*`/`xmlriver_*` принимают ОДИН регион. Полный справочник id — инструмент `wordstat_regions_tree`.
 
 ## Где и как использовать
 
@@ -326,7 +355,7 @@ pnpm test:live    # лайв-смоук по реальным API (нужны к
 node servers/xmlstock/dist/index.js   # ручной запуск (stdio)
 ```
 
-Юнит-тесты покрывают чистую логику: маскирование секретов, классификацию OAuth-ошибок, пагинацию Метрики/GSC (дедуп, `truncated`), фильтры, парсер SERP, регионы. Лайв-смоук поднимает каждый сервер и дёргает бесплатный инструмент (`xmlstock_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`) — проверка авторизации end-to-end.
+Юнит-тесты покрывают чистую логику: маскирование секретов, классификацию OAuth-ошибок, пагинацию Метрики/GSC (дедуп, `truncated`), фильтры, парсер SERP, регионы. Лайв-смоук поднимает каждый сервер и дёргает бесплатный инструмент (`xmlstock_balance`, `xmlriver_balance`, `wordstat_frequency`, `gsc_list_sites`, `ywm_hosts`, `metrika_counters`, `aparser_ping`) — проверка авторизации end-to-end.
 
 Общий код (`shared/`): HTTP-клиент с ретраями на 429/5xx (3 попытки, экспоненциальный backoff, Retry-After), загрузчик env + персистентный конфиг, фабрика auth-инструментов, Яндекс-OAuth с авто-refresh, JSON-хелперы MCP, счётчик расхода платных вызовов. XMLStock дополнительно ретраит свои «временные» коды из тела XML, код 15 («ничего не найдено») трактуется как пустая выдача.
 
