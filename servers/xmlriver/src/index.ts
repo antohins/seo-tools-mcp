@@ -19,9 +19,13 @@
  *    text_bolds будет пустым;
  *  - подсказки Google (xmlriver_suggest): POST setab=tips с JSON-телом {"phrases":[...]}
  *    (1–50 фраз), ответ — плоский {"phrases":[...]}, ~10 подсказок на фразу в порядке входа;
- *    ПЛАТНО за КАЖДУЮ фразу.
+ *    ПЛАТНО за КАЖДУЮ фразу;
+ *  - «Вопросы по теме» Google / People Also Ask (xmlriver_related_questions): GET setab=rq,
+ *    count ОБЯЗАТЕЛЕН (без него ошибка 15), макс. 50. Вопросы (question) парсятся всегда;
+ *    title/snippet/url ПУСТЫЕ, пока в кабинете XMLRiver не включена платная опция
+ *    «Related Questions с ответами». Нет PAA-блока → код 15 (тарифицируется, empty: true).
  * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода),
- * сбор подсказок — в ./suggest.js.
+ * сбор подсказок — в ./suggest.js, сбор «Вопросов по теме» — в ./related.js.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -36,6 +40,7 @@ import {
   safeHandler,
 } from '@seo-tools/shared';
 import { z } from 'zod';
+import { collectRelatedQuestions } from './related.js';
 import { buildSerpParams, buildVerticalParams, checkIndex, collectSerp, collectVertical, GOOGLE_URL, YANDEX_URL } from './serp.js';
 import { collectSuggest, suggestPhrasesSchema } from './suggest.js';
 import { parseImages, parseNews } from './verticals.js';
@@ -287,6 +292,33 @@ server.registerTool(
     },
   },
   safeHandler(async (args) => jsonResult(await collectSuggest(args.phrases, args.region, args.account))),
+);
+
+server.registerTool(
+  'xmlriver_related_questions',
+  {
+    description:
+      'Блок «Вопросы по теме» (People Also Ask) Google через XMLRiver (setab=rq, ПЛАТНО за запрос). ' +
+      'Возвращает { questions: [{ question, title?, snippet?, url? }], count, answers_available, empty?, note? }. ' +
+      'ВАЖНО: title/snippet/url (ответы на вопросы) заполняются только при включённой платной опции ' +
+      '«Related Questions с ответами» в кабинете XMLRiver (настройки сбора); иначе они пустые ' +
+      '(answers_available: false + note), сами вопросы доступны всегда. ' +
+      'Отсутствие PAA-блока по запросу (код 15) ТАРИФИЦИРУЕТСЯ и помечается { questions: [], empty: true, note }.',
+    inputSchema: {
+      query: z.string().min(1),
+      count: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .default(10)
+        .describe('Сколько вопросов собрать; count — обязательный параметр API XMLRiver (без него ошибка 15), максимум 50'),
+      region: z.string().optional().describe('«Москва»/«Россия»/213/225 — ОДИН регион (название или id Яндекса, lr); без него — без гео'),
+      device: z.enum(['desktop', 'mobile']).default('desktop'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => jsonResult(await collectRelatedQuestions(args.query, args.count, args.region, args.device, args.account))),
 );
 
 server.registerTool(

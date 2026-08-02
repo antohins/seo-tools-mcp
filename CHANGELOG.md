@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **xmlriver**: new `xmlriver_related_questions` tool — the Google "People Also Ask" block
+  via `setab=rq` (PAID per request; `count` is a mandatory API parameter, 1–50).
+  Returns `{ questions: [{ question, title?, snippet?, url? }], count, answers_available,
+  empty?, note? }`. Questions are always parsed; `title`/`snippet`/`url` are empty unless the
+  paid "Related Questions with answers" option is enabled in the XMLRiver dashboard —
+  the response then carries `answers_available: false` and an explanatory note. A query
+  without a PAA block (API code 15) is billed and reported as `{ questions: [], empty: true }`;
+  optional `region` (`lr`) and `device` parameters.
 - **xmlriver**: new `xmlriver_suggest` tool — Google search suggestions via `setab=tips`
   (POST `{"phrases":[...]}`, 1–50 phrases per call, PAID per phrase: N phrases = N charges).
   Returns `{ phrases: string[] (flat, in input-phrase order, ~10 tips per phrase),

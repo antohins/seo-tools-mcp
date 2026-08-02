@@ -16,7 +16,7 @@
 | Сервер | Рабочие инструменты | Авторизация |
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_wordstat`, `xmlstock_wordstat_dynamics`, `xmlstock_wordstat_regions`, `xmlstock_wordstat_regions_tree`, `xmlstock_balance` | API-ключ |
-| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_balance` | API-ключ |
+| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
@@ -46,6 +46,7 @@
 - `xmlriver_news` — новости Google (заголовок, источник, дата, сниппет), фильтр по времени
 - `xmlriver_check_index` — проверка индексации URL в Google/Яндексе (`inindex`)
 - `xmlriver_suggest` — поисковые подсказки Google (до 50 фраз за вызов, платно за каждую фразу)
+- `xmlriver_related_questions` — блок «Вопросы по теме» / People Also Ask Google (вопросы всегда; ответы — только при включённой платной опции «Related Questions с ответами» в кабинете)
 - `xmlriver_balance` — баланс аккаунта / проверка ключа (бесплатно)
 
 ### wordstat — частотности Яндекса

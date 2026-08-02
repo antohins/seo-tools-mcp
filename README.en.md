@@ -16,7 +16,7 @@ Seven **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, G
 | Server | Tools | Auth |
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_wordstat`, `xmlstock_wordstat_dynamics`, `xmlstock_wordstat_regions`, `xmlstock_wordstat_regions_tree`, `xmlstock_balance` | API key |
-| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_balance` | API key |
+| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
@@ -48,6 +48,7 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `xmlriver_news` — Google news (title, source, date, snippet), time filter
 - `xmlriver_check_index` — check whether a URL is indexed in Google/Yandex (`inindex`)
 - `xmlriver_suggest` — Google search suggestions (up to 50 phrases per call, billed per phrase)
+- `xmlriver_related_questions` — Google "People Also Ask" block (questions always returned; answers only with the paid "Related Questions with answers" option enabled in the XMLRiver dashboard)
 - `xmlriver_balance` — account balance / key check (free)
 
 ### wordstat — Yandex keyword frequencies

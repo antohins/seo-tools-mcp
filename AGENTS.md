@@ -161,7 +161,11 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
   из HTML; шлём только по `includeAIOverview=true` и только на первой странице.
   Подсказки (`xmlriver_suggest`): POST `setab=tips` с JSON-телом `{"phrases":[...]}` (1–50 фраз),
   ответ — плоский `{"phrases":[...]}` (~10 на фразу в порядке входа), ПЛАТНО за каждую фразу;
-  ошибки — HTTP 200 с JSON `{"code","error"}`.
+  ошибки — HTTP 200 с JSON `{"code","error"}`. «Вопросы по теме» / PAA
+  (`xmlriver_related_questions`): GET `setab=rq`, `count` ОБЯЗАТЕЛЕН (без него ошибка 15),
+  макс. 50; `title`/`snippet`/`url` приходят пустыми, пока в кабинете не включена платная
+  опция «Related Questions с ответами» (вопросы парсятся всегда) — пустые ответы помечаются
+  `answers_available: false`; нет PAA-блока → код 15 (тарифицируется, `empty: true`).
 - **Wordstat (Yandex Cloud)**: квоты 10 rps / 100 запросов в час (429 ретраится); точная частота —
   операторы `"!слово !слово"`; данные — за последние 30 дней.
 - **GSC**: приоритет OAuth над service account; OAuth-токен видит все свойства аккаунта.
