@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format is based on
 ## [1.4.0] — 2026-08-04
 
 ### Added
-- **New server `aparser`** — a bridge to a self-hosted [A-Parser](https://a-parser.com) instance
+- **New server `aparser`** — a bridge to a self-hosted [A-Parser](https://a-parser.com/?ref=38832) instance
   via its HTTP API (7th server). v1 is synchronous and read-only: `aparser_ping`, `aparser_status`
   (readiness verdict + live-proxy count), `aparser_proxies`, `aparser_parsers`,
   `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`,

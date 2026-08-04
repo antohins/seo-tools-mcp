@@ -107,7 +107,7 @@ Search Analytics dates are in Pacific Time (not MSK); history is ~16 months; fin
 - `aparser_request` — universal synchronous request to any parser (`oneRequest`)
 - `aparser_bulk_request` — bulk request: one parser, many queries, N threads (`bulkRequest`)
 
-> You need your **own** running [A-Parser](https://a-parser.com) instance (licence + server): the bridge drives it but does not host or proxy it for you. Proxies and proxy checkers (packs) are configured once in the A-Parser GUI — the bridge reads, verifies (preflight) and selects them (`checkers`), but does not create them. v1 is synchronous and read-only: the task queue and large async exports are not wired up.
+> You need your **own** running [A-Parser](https://a-parser.com/?ref=38832) instance (licence + server): the bridge drives it but does not host or proxy it for you. Proxies and proxy checkers (packs) are configured once in the A-Parser GUI — the bridge reads, verifies (preflight) and selects them (`checkers`), but does not create them. v1 is synchronous and read-only: the task queue and large async exports are not wired up.
 
 ## Quick start
 
@@ -282,7 +282,7 @@ Yandex API limitations (not server bugs): URL filtering in Webmaster exists only
 
 ### A-Parser (self-hosted) — SERP and hundreds of parsers via your own box
 
-1. Your own running [A-Parser](https://a-parser.com) instance (licence + server) — the bridge drives it but does not host or proxy it.
+1. Your own running [A-Parser](https://a-parser.com/?ref=38832) instance (licence + server) — the bridge drives it but does not host or proxy it.
 2. In A-Parser: **Settings → API** — enable the API server, note the port (usually 9091) and the password.
 3. `APARSER_URL` = `http://<instance-IP>:<port>/API` (the `/API` path is required), `APARSER_PASSWORD` = the same password → `aparser_set_credentials`.
 4. Check: `aparser_ping`, then `aparser_status` (instance readiness + live proxies).

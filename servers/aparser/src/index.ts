@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * aparser-mcp — мост к self-hosted A-Parser (a-parser.com) через его HTTP API.
+ * aparser-mcp — мост к self-hosted A-Parser (https://a-parser.com/?ref=38832) через его HTTP API.
  * Авторизация: env APARSER_URL (напр. http://IP:9091/API) + APARSER_PASSWORD.
  *
  * v1 — СИНХРОННЫЙ и READ-ONLY: только читаем/диагностируем/запускаем парсинг
