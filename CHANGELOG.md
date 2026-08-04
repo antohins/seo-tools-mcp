@@ -6,7 +6,19 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-04
+
 ### Added
+- **New server `aparser`** — a bridge to a self-hosted [A-Parser](https://a-parser.com) instance
+  via its HTTP API (7th server). v1 is synchronous and read-only: `aparser_ping`, `aparser_status`
+  (readiness verdict + live-proxy count), `aparser_proxies`, `aparser_parsers`,
+  `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`,
+  `aparser_suggest`, `aparser_request` (universal `oneRequest` for any of ~150 parsers) and
+  `aparser_bulk_request`. Proxy packs (proxy checkers) are read/verified/selected (never created);
+  presets are first-class with env defaults; a live-proxy preflight guards SERP calls and a human
+  diagnostic explains captcha/burned-proxy failures. Verified end-to-end against a live instance
+  (A-Parser v1.2.3527). Config: `APARSER_URL` + `APARSER_PASSWORD` (no OAuth).
+
 - **xmlriver**: Google geo-targeting for `xmlriver_serp` (google engine) and `xmlriver_suggest` —
   new `location` and `country` parameters. `location` (English city name, e.g. "Moscow", or a
   numeric Google criteria ID like "1011969") resolves to the `loc` API parameter via the XMLRiver
@@ -351,7 +363,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.1.0...v1.2.0

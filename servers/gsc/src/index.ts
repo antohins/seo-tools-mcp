@@ -234,7 +234,7 @@ async function queryAll(siteUrl: string, body: Record<string, unknown>, limit: n
   return { rows, truncated, truncatedBy, firstIncompleteDate };
 }
 
-const server = new McpServer({ name: 'gsc', version: '1.3.0' });
+const server = new McpServer({ name: 'gsc', version: '1.4.0' });
 
 registerAuthTools(
   server,

@@ -45,7 +45,7 @@ import {
 
 loadSharedEnv();
 
-const server = new McpServer({ name: 'aparser', version: '1.3.0' });
+const server = new McpServer({ name: 'aparser', version: '1.4.0' });
 
 registerAuthTools(
   server,
