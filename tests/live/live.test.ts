@@ -72,8 +72,10 @@ describe.skipIf(!LIVE)('live smoke (LIVE=1, нужны креды)', () => {
     expect(r.isError, r.text).toBe(false);
   });
 
-  it('aparser_ping (free; нужен запущенный инстанс A-Parser)', { timeout: 30_000 }, async () => {
+  it('aparser_ping (free; нужен запущенный инстанс A-Parser)', { timeout: 30_000 }, async (ctx) => {
     const r = await callTool('aparser', 'aparser_ping');
+    // инстанс A-Parser опционален (self-hosted): без кредов — пропускаем, а не падаем
+    if (r.isError && r.text.includes('APARSER_URL')) ctx.skip();
     expect(r.isError, r.text).toBe(false);
     expect(r.text).toMatch(/"ok":true/);
   });
