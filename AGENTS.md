@@ -194,6 +194,10 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
 - **Wordstat (Yandex Cloud)**: квоты 10 rps / 100 запросов в час (429 ретраится); точная частота —
   операторы `"!слово !слово"`; данные — за последние 30 дней.
 - **GSC**: приоритет OAuth над service account; OAuth-токен видит все свойства аккаунта.
+  `gsc_query`: произвольные `filters` (dimensionFilterGroups, AND внутри группы) и `aggregationType`;
+  contains/regex-операторы — только для query/page, для country/device/searchAppearance — только
+  equals/notEquals (валидируется в `logic.ts` до запроса); сборка групп/тела — `buildFilterGroups`/
+  `buildQueryBody` в `servers/gsc/src/logic.ts`.
 - **Яндекс Вебмастер/Метрика**: одно OAuth-приложение и один токен на оба сервиса, авто-refresh;
   ограничения API (фильтр по URL только в query-analytics ~2 недели; «рекомендованных запросов» в
   API v4 нет — `ywm_recommended_queries` аппроксимирует) — не баги серверов.

@@ -56,7 +56,7 @@
 - `wordstat_regions_tree` — полное дерево регионов Вордстата (id + имя)
 
 ### gsc — Google Search Console
-- `gsc_query` — Search Analytics (клики/показы/CTR/позиция), авто-пагинация, `dataState` final/all
+- `gsc_query` — Search Analytics (клики/показы/CTR/позиция), авто-пагинация, `dataState` final/all, произвольные фильтры измерений (`filters`, AND-семантика) и `aggregationType` (auto/byProperty/byPage)
 - `gsc_inspect_url` — URL Inspection: статус индексации, покрытие, canonical, последний обход, mobile usability, rich results
 - `gsc_list_sites` — свойства, доступные авторизации
 - `gsc_get_site` — уровень доступа к свойству

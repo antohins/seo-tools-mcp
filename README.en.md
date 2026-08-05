@@ -58,7 +58,7 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `wordstat_regions_tree` — full Wordstat region tree (id + name)
 
 ### gsc — Google Search Console
-- `gsc_query` — Search Analytics (clicks/impressions/CTR/position), auto-pagination, `dataState` final/all
+- `gsc_query` — Search Analytics (clicks/impressions/CTR/position), auto-pagination, `dataState` final/all, arbitrary dimension filters (`filters`, AND semantics) and `aggregationType` (auto/byProperty/byPage)
 - `gsc_inspect_url` — URL Inspection: index status, coverage, canonical, last crawl, mobile usability, rich results
 - `gsc_list_sites` — properties available to the authorization
 - `gsc_get_site` — permission level for a property

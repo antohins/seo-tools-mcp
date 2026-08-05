@@ -33,6 +33,7 @@ import {
 import { JWT } from 'google-auth-library';
 import { z } from 'zod';
 import {
+  buildQueryBody,
   forbidden403Hint,
   type GscRow,
   isInvalidGrant,
@@ -437,13 +438,35 @@ server.registerTool(
       '(свежие — через dataState=all, тогда в ответе firstIncompleteDate — с какой даты данные ещё не финальные). ' +
       'Пагинация собирается автоматически до rowLimit; truncated=true — данные могли остаться ' +
       '(truncatedBy: limit — упёрлись в rowLimit, deadline — общий дедлайн пагинации 5 мин). ' +
-      'page — точный URL страницы для фильтра (опционально); dimensions — например ["query"], ["query","device"], ["page"].',
+      'page — точный URL страницы для фильтра (мерджится в ту же filter-группу, что и filters); dimensions — например ["query"], ["query","device"], ["page"]. ' +
+      'filters — произвольные фильтры измерений (dimensionFilterGroups): между фильтрами — AND; contains/regex — только для query/page, ' +
+      'для country/device/searchAppearance — только equals/notEquals. Примеры: все запросы со словом — {dimension: "query", operator: "contains", expression: "купить"}; ' +
+      'раздел сайта — {dimension: "page", operator: "includingRegex", expression: "/blog/"}. ' +
+      'aggregationType — агрегация данных: auto (дефолт), byProperty (по свойству; НЕ сочетается с фильтром/группировкой по page ' +
+      'и с searchType discover/googleNews — API вернёт ошибку), byPage (по каноническому URL страницы).',
     inputSchema: {
       siteUrl: z
         .string()
         .optional()
         .describe('Свойство GSC, например sc-domain:example.com (по умолчанию GSC_SITE_URL из конфига); для URL-prefix — с завершающим /'),
       page: z.string().optional().describe('Точный URL страницы для фильтра, например https://example.com/page/'),
+      filters: z
+        .array(
+          z.object({
+            dimension: z.enum(['query', 'page', 'country', 'device', 'searchAppearance']).describe('Измерение фильтра'),
+            operator: z
+              .enum(['equals', 'notEquals', 'contains', 'notContains', 'includingRegex', 'excludingRegex'])
+              .describe('Оператор (contains/notContains/regex — только для query и page)'),
+            expression: z.string().min(1).describe('Значение фильтра (для regex — синтаксис RE2)'),
+          }),
+        )
+        .max(25)
+        .optional()
+        .describe('Произвольные фильтры измерений (AND внутри группы), мержатся с page в одну группу (page + до 25 фильтров)'),
+      aggregationType: z
+        .enum(['auto', 'byProperty', 'byPage'])
+        .optional()
+        .describe('Агрегация данных: auto (дефолт, в запрос не шлётся) | byProperty | byPage'),
       startDate: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -465,16 +488,7 @@ server.registerTool(
   safeHandler(async (args) => {
     validateDates(args.startDate, args.endDate);
     const siteUrl = resolveSite(args.siteUrl, args.account);
-    const body: Record<string, unknown> = {
-      startDate: args.startDate,
-      endDate: args.endDate,
-      dimensions: args.dimensions,
-      type: args.searchType,
-      dataState: args.dataState,
-    };
-    if (args.page) {
-      body.dimensionFilterGroups = [{ filters: [{ dimension: 'page', operator: 'equals', expression: args.page }] }];
-    }
+    const body = buildQueryBody(args);
     const { rows: raw, truncated, truncatedBy, firstIncompleteDate } = await queryAll(siteUrl, body, args.rowLimit, args.account);
     const rows = raw.map((r) => mapKeysToDimensions(r, args.dimensions));
     console.error(

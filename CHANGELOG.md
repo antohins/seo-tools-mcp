@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **gsc**: `gsc_query` gained arbitrary dimension filters (`filters` → `dimensionFilterGroups`,
+  up to 25, AND semantics within the group; the legacy `page` parameter keeps working and is
+  merged into the same group) and `aggregationType` (`auto`/`byProperty`/`byPage`; sent only
+  when non-default). Dimension×operator compatibility is validated BEFORE the request with a
+  clear error (per the official API docs, contains/regex operators apply to `query`/`page` only;
+  `country`/`device`/`searchAppearance` accept only equals/notEquals). Filter group and request
+  body assembly live in `servers/gsc/src/logic.ts` (`buildFilterGroups`, `buildQueryBody`).
 - **xmlstock**: `xmlstock_serp` gained a third engine `yandex_xml` — the official Yandex XML API
   via XMLStock (`/yandex/xml/`, live-verified 2026-08). Unlike the live engines, `groupby` works
   (up to 100 results per single PAID request, `depth` up to 1000), `hlword` highlights are native
