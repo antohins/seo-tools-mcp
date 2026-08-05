@@ -30,7 +30,7 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 ## Tools by server
 
 ### xmlstock — Google/Yandex SERP
-- `xmlstock_serp` — Google/Yandex web SERP (organic + highlights + SERP features): region, device, safe search, sort (Yandex), time period, ad blocks
+- `xmlstock_serp` — Google/Yandex web SERP (organic + highlights + SERP features): region, device, safe search, sort (Yandex), time period, ad blocks; third engine `yandex_xml` — official Yandex XML (groupby up to 100 per single request, hlword highlights on any device, found/found-docs stats; rate from 24 ₽/1000)
 - `xmlstock_images` — Google image search (page url + image url + title)
 - `xmlstock_news` — Google news (title, source, date, snippet)
 - `xmlstock_video` — Google video (url, title, thumbnail, host, channel, duration)

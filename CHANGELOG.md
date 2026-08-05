@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **xmlstock**: `xmlstock_serp` gained a third engine `yandex_xml` — the official Yandex XML API
+  via XMLStock (`/yandex/xml/`, live-verified 2026-08). Unlike the live engines, `groupby` works
+  (up to 100 results per single PAID request, `depth` up to 1000), `hlword` highlights are native
+  (title and passages, any device), and the response carries the official "found" stats:
+  `found` (`<found priority="all">`), `found_docs` (`<found-docs priority="all">` — a DIFFERENT
+  counter, never mixed with `found`) and `found_human`; result docs gain optional
+  `id`/`modtime`/`saved_copy_url`/`is_local`. `safeSearch` maps to the official family filter
+  (`filter` strict/moderate/none), `sortby`/`maxpassages` are supported; SERP features/packs are
+  absent (pure organic). Billed at a separate, higher rate (from 24 ₽/1000) via its own CostLogger
+  (`XMLSTOCK_YANDEX_XML_PRICE_PER_CALL`, default 0.024). Parsing fields live in
+  `shared/src/serp/parse.ts`, engine logic in `servers/xmlstock/src/serp.ts`.
 - **xmlriver**: `xmlriver_serp` gained `includeAdditional` — extra Google SERP blocks via the
   `additional=` API parameter (Google only, sent on the first SERP page only, like `ai=1`).
   Blocks arrive inside `<response><addresults>` and are parsed into the response field

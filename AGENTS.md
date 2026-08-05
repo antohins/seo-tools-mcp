@@ -152,6 +152,14 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
 - **XMLStock**: страницы выдачи с 0 у обоих движков; подсветки `hlword=1` и PAA/related — только на
   desktop (mobile отдаёт только позиции+сниппеты); `lr` принимает id регионов Яндекса для обоих
   движков; ошибки приходят HTTP 200 с `<error code>` в теле.
+  Третий движок `yandex_xml` (эндпоинт `/yandex/xml/`, официальный Яндекс XML, лайв 2026-08):
+  `groupby` до 100 РАБОТАЕТ (до 100 результатов за 1 платный запрос, depth до 1000), hlword
+  приходит нативно в title и passages на любых устройствах; `<found>` и `<found-docs>` — РАЗНЫЕ
+  счётчики (в ответе `found` / `found_docs` / `found_human`, не путать), у документов есть
+  `id`/`modtime`/`saved_copy_url`/`is_local`; `filter` — семейный фильтр strict/moderate/none
+  (корректный дом для safeSearch), поддержаны `sortby` (rlv/tm) и `maxpassages`; SERP-фичей/packs
+  нет — чистая органика; тариф дороже (от 24 ₽/1000) — отдельный CostLogger
+  (`XMLSTOCK_YANDEX_XML_PRICE_PER_CALL`, дефолт 0.024).
 - **XMLRiver**: `groupby` игнорируется (всегда 10/страницу) — глубина только пагинацией
   (`page`: Google с 1, Яндекс с 0), каждая страница — платный запрос; `<hlword>` не отдаёт
   (проверено лайвом); `inindex` работает и у Яндекса; `lr` шлём только Яндексу (у Google это код

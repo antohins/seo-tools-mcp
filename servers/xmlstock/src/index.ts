@@ -7,11 +7,17 @@
  *
  * Нюансы API: подсветки — hlword=1 (вложенный тег <hlword>, БЕЗ CDATA);
  * PAA + related searches — related=1 (PAA только у Google);
- * страницы с 0 у обоих движков; глубина только пагинацией (groupby мёртв, всегда 10);
+ * страницы с 0 у всех движков; у live-движков глубина только пагинацией (groupby мёртв, всегда 10);
  * lr принимает id регионов Яндекса и для Google (авто-маппинг на стороне XMLStock);
  * ошибки приходят HTTP 200 с XML <error code>: 20-25/101/110/111/500 ретраить, 55 rate-limit,
  * 15 = пустая выдача (деньги списаны), 31/42 — фатальные (авторизация), 200 — фатальная.
  * includeSimilar → filter=0 (стандартная семантика Google «показать omitted results»).
+ * Третий движок yandex_xml — официальный Яндекс XML (эндпоинт /yandex/xml/, лайв 2026-08):
+ * groupby до 100 РАБОТАЕТ (до 100 результатов за 1 платный запрос), hlword-подсветки нативно
+ * (title и passages), found и found-docs — РАЗНЫЕ счётчики (не путать), filter — семейный
+ * фильтр strict/moderate/none (корректный дом для safeSearch), sortby rlv/tm, maxpassages 1-5;
+ * SERP-фичей/packs нет — чистая органика; тариф дороже (от 24 ₽/1000) — отдельный счётчик
+ * (XMLSTOCK_YANDEX_XML_PRICE_PER_CALL).
  * Wordstat у XMLStock ЕСТЬ (эндпоинт /wordstat/json/, официальный Wordstat API v2): tools
  * xmlstock_wordstat / _dynamics / _regions / _regions_tree — тем же ключом XMLSTOCK, без Yandex Cloud.
  * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи, учёт расхода, verticalCommon);
@@ -31,7 +37,18 @@ import {
   safeHandler,
 } from '@seo-tools/shared';
 import { z } from 'zod';
-import { collectSerp, collectVertical, GOOGLE_URL, resolveLr, verticalCommon, YANDEX_URL } from './serp.js';
+import {
+  collectSerp,
+  collectVertical,
+  GOOGLE_URL,
+  resolveLr,
+  type SerpCollection,
+  verticalCommon,
+  YANDEX_URL,
+  YANDEX_XML_URL,
+  yandexXmlCommon,
+  yandexXmlCost,
+} from './serp.js';
 import { parseImages, parseNews, parseVideo } from './verticals.js';
 import {
   createWsRegionNames,
@@ -70,7 +87,7 @@ registerAuthTools(
   {
     help:
       '1) Регистрация на https://xmlstock.com → личный кабинет. ' +
-      '2) Пополнить баланс (Google XML от 12 ₽/1000, Яндекс Live от 12 ₽/1000, Wordstat ~19 ₽/1000). ' +
+      '2) Пополнить баланс (Google XML от 12 ₽/1000, Яндекс Live от 12 ₽/1000, официальный Яндекс XML от 24 ₽/1000, Wordstat ~19 ₽/1000). ' +
       '3) Взять ID пользователя и API-ключ из кабинета. Проверка после сохранения — xmlstock_balance.',
   },
 );
@@ -90,16 +107,28 @@ server.registerTool(
       'results: [{ position, url, title, snippet, text_bolds (подсветки hlword) }], ' +
       'serp_features: { featured_snippet, paa (только Google), related, sitelinks_top1, packs } }. ' +
       'Пустая выдача (код 15) ТАРИФИЦИРУЕТСЯ и помечается { results: [], empty: true, note }. ' +
-      'depth>10 добирается пагинацией (каждая страница — отдельный платный запрос). ' +
-      'region: ОДИН регион (название или числовой id Яндекса) — работает для ОБОИХ движков. ' +
+      'depth>10 добирается пагинацией (каждая страница — отдельный платный запрос; у yandex_xml — до 100/страница). ' +
+      'region: ОДИН регион (название или числовой id Яндекса) — работает для ВСЕХ движков. ' +
       'ОГРАНИЧЕНИЕ ИСТОЧНИКА: device=mobile отдаёт только позиции и сниппеты — без hlword/PAA/related; ' +
-      'подсветки и SERP-фичи снимать с desktop.',
+      'подсветки и SERP-фичи снимать с desktop. ' +
+      'engine=yandex_xml — ОФИЦИАЛЬНЫЙ Яндекс XML (легальный API, тариф дороже: от 24 ₽/1000): ' +
+      'groupby до 100 работает — до 100 результатов за ОДИН платный запрос (depth до 1000), ' +
+      'hlword-подсветки на любых устройствах, статистика «найдено»: found (по запросу), ' +
+      'found_docs (документов), found_human (строкой); в results доп. поля id/modtime/saved_copy_url/is_local. ' +
+      'Отличие от yandex (live): SERP-фичей/packs нет — чистая органика; device/searchDomain/lang/l10n/period/' +
+      'exactQuery/includeAds/includeSimilar не применимы; safeSearch маппится в filter (strict/moderate/none).',
     inputSchema: {
       query: z.string().min(1),
-      engine: z.enum(['google', 'yandex']).default('google'),
+      engine: z.enum(['google', 'yandex', 'yandex_xml']).default('google'),
       device: z.enum(['desktop', 'mobile']).default('desktop'),
       region: serpRegionParam,
-      depth: z.number().int().min(1).max(30).default(10).describe('Сколько органических позиций собрать'),
+      depth: z
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .default(10)
+        .describe('Сколько органических позиций собрать: google/yandex — до 30 (10/страница), yandex_xml — до 1000 (100/страница)'),
       excludeAggregators: z
         .boolean()
         .default(false)
@@ -127,49 +156,65 @@ server.registerTool(
         .default('moderate')
         .describe(
           'Безопасный поиск: Google — moderate = дефолт Google (размытие, параметр в API НЕ шлётся), strict = фильтр (safe=on), ' +
-            'off = выкл (safe=off); Yandex filter (moderate/strict/none)',
+            'off = выкл (safe=off); Yandex и yandex_xml — семейный фильтр filter (moderate/strict/none)',
         ),
       includeSimilar: z.boolean().default(false).describe('Google: показать скрытые похожие результаты (filter=0)'),
-      sortby: z.enum(['relevance', 'date']).default('relevance').describe('Yandex: сортировка выдачи (rlv / tm — по дате)'),
-      maxpassages: z.number().int().min(1).max(5).optional().describe('Yandex: сколько пассажей-сниппетов на документ (1–5)'),
+      sortby: z.enum(['relevance', 'date']).default('relevance').describe('Yandex/yandex_xml: сортировка выдачи (rlv / tm — по дате)'),
+      maxpassages: z.number().int().min(1).max(5).optional().describe('Yandex/yandex_xml: сколько пассажей-сниппетов на документ (1–5)'),
       l10n: z.enum(['ru', 'uk', 'be', 'kk', 'tr', 'en']).optional().describe('Yandex: язык уведомлений'),
       account: accountParam,
     },
   },
   safeHandler(async (args) => {
     const isGoogle = args.engine === 'google';
-    const base = isGoogle ? GOOGLE_URL : YANDEX_URL;
+    const isYandexXml = args.engine === 'yandex_xml';
+    // лимит depth до платного запроса: live-движки — 10 результатов/страница (макс. 30),
+    // официальный Яндекс XML — groupby до 100 (макс. 1000)
+    if (!isYandexXml && args.depth > 30) {
+      throw new Error(
+        `depth=${args.depth} доступен только для engine=yandex_xml (100 результатов за запрос); для google/yandex максимум 30`,
+      );
+    }
+    const base = isGoogle ? GOOGLE_URL : isYandexXml ? YANDEX_XML_URL : YANDEX_URL;
 
-    const common: Record<string, string | number | undefined> = {
-      query: args.query,
-      device: args.device,
-      hlword: 1, // подсветки <hlword> — критичны для блока A
-      related: 1, // PAA (google) + related searches
-      domain: args.searchDomain ?? 'ru',
-    };
-    const lr = resolveLr(args.region);
-    if (lr !== undefined) common.lr = lr;
-    if (args.includeAds) common.ads = 1;
-    if (isGoogle) {
-      if (args.lang) common.hl = args.lang;
-      if (args.period) common.tbs = args.period;
-      if (args.exactQuery) common.nfpr = 1;
-      if (args.safeSearch === 'strict') common.safe = 'on';
-      else if (args.safeSearch === 'off') common.safe = 'off';
-      // filter=0 — стандартная семантика Google «показать omitted/similar results» (подтверждено лайвом)
-      if (args.includeSimilar) common.filter = 0;
+    let collected: SerpCollection;
+    if (isYandexXml) {
+      // официальный Яндекс XML: hlword нативно, device/domain/ads/related не применимы,
+      // groupby=min(depth,100) — одна страница до 100 результатов за 1 платный запрос
+      const common = yandexXmlCommon(args);
+      collected = await collectSerp(base, common, args.depth, args.account, { groupby: Math.min(args.depth, 100), cost: yandexXmlCost });
     } else {
-      if (args.lang) common.lang = args.lang;
-      if (args.period) common.within = args.period;
-      if (args.exactQuery) common.noreask = 1;
-      // Yandex family filter: moderate (дефолт) / strict / none
-      common.filter = args.safeSearch === 'off' ? 'none' : args.safeSearch;
-      if (args.sortby === 'date') common.sortby = 'tm';
-      if (args.maxpassages) common.maxpassages = args.maxpassages;
-      if (args.l10n) common.l10n = args.l10n;
+      const common: Record<string, string | number | undefined> = {
+        query: args.query,
+        device: args.device,
+        hlword: 1, // подсветки <hlword> — критичны для блока A
+        related: 1, // PAA (google) + related searches
+        domain: args.searchDomain ?? 'ru',
+      };
+      const lr = resolveLr(args.region);
+      if (lr !== undefined) common.lr = lr;
+      if (args.includeAds) common.ads = 1;
+      if (isGoogle) {
+        if (args.lang) common.hl = args.lang;
+        if (args.period) common.tbs = args.period;
+        if (args.exactQuery) common.nfpr = 1;
+        if (args.safeSearch === 'strict') common.safe = 'on';
+        else if (args.safeSearch === 'off') common.safe = 'off';
+        // filter=0 — стандартная семантика Google «показать omitted/similar results» (подтверждено лайвом)
+        if (args.includeSimilar) common.filter = 0;
+      } else {
+        if (args.lang) common.lang = args.lang;
+        if (args.period) common.within = args.period;
+        if (args.exactQuery) common.noreask = 1;
+        // Yandex family filter: moderate (дефолт) / strict / none
+        common.filter = args.safeSearch === 'off' ? 'none' : args.safeSearch;
+        if (args.sortby === 'date') common.sortby = 'tm';
+        if (args.maxpassages) common.maxpassages = args.maxpassages;
+        if (args.l10n) common.l10n = args.l10n;
+      }
+      collected = await collectSerp(base, common, args.depth, args.account);
     }
 
-    const collected = await collectSerp(base, common, args.depth, args.account);
     let results = collected.results;
     if (args.excludeAggregators) {
       const aggs = aggregators();
@@ -182,19 +227,27 @@ server.registerTool(
     return jsonResult({
       query: args.query,
       engine: args.engine,
-      device: args.device,
+      // device к yandex_xml не применяется — не эхим, чтобы не вводить в заблуждение
+      ...(isYandexXml ? {} : { device: args.device }),
       region: args.region,
       found: collected.found,
+      // статистика «найдено» официального Яндекс XML: found_docs (документов) ≠ found (по запросу)
+      ...(isYandexXml ? { found_docs: collected.foundDocs, found_human: collected.foundHuman } : {}),
       truncated: collected.truncated,
       // код 15 — пустая выдача: деньги списаны, явно помечаем, чтобы не путать с «нет данных»
       ...(collected.empty ? { empty: true, note: 'пустая выдача (код 15), запрос тарифицирован' } : {}),
       count: results.length,
       results,
-      serp_features: {
-        ...(collected.features ?? { featured_snippet: null, paa: [], related: [] }),
-        sitelinks_top1: collected.sitelinksTop1,
-        packs: collected.packs,
-      },
+      // у yandex_xml SERP-фичей/packs нет — чистая органика, поле не отдаём
+      ...(isYandexXml
+        ? {}
+        : {
+            serp_features: {
+              ...(collected.features ?? { featured_snippet: null, paa: [], related: [] }),
+              sitelinks_top1: collected.sitelinksTop1,
+              packs: collected.packs,
+            },
+          }),
     });
   }),
 );

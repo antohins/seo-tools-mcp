@@ -14,6 +14,11 @@ export interface SerpDoc {
   site_name?: string;
   pubDate?: string;
   breadcrumbs?: string;
+  // поля официального Яндекс.XML (xmlstock engine=yandex_xml); live-движки их не отдают
+  id?: string;
+  modtime?: string;
+  saved_copy_url?: string;
+  is_local?: boolean;
 }
 
 /**
@@ -56,6 +61,11 @@ export function parseDocs(doc: any): { docs: SerpDoc[]; packs: string[]; sitelin
       if (d?.site_name) item.site_name = stripTags(String(d.site_name));
       if (d?.pubDate) item.pubDate = stripTags(String(d.pubDate));
       if (d?.breadcrumbs) item.breadcrumbs = stripTags(String(d.breadcrumbs));
+      // официальный Яндекс.XML (engine=yandex_xml): атрибут id и служебные поля документа
+      if (d?.['@_id']) item.id = String(d['@_id']);
+      if (d?.modtime) item.modtime = String(d.modtime);
+      if (d?.['saved-copy-url']) item.saved_copy_url = String(d['saved-copy-url']);
+      if (d?.['is-local'] !== undefined) item.is_local = String(d['is-local']) === '1';
       docs.push(item);
       if (position === 1) {
         sitelinksTop1 = asArray<any>(d?.sitelinks?.sitelink ?? d?.oneline_sitelinks?.sitelink)
