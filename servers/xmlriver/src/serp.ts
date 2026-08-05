@@ -22,10 +22,15 @@
  *    через resolveDomainId (./geo.js, справочник DOMAINS из ./data.js); строка тоже
  *    принималась API (старое поведение), но дока требует число;
  *  - у Яндекса XMLRiver filter — «скрывать похожие результаты» (включается filter=1),
- *    а не family-filter: moderate/strict/none туда слать нельзя — не шлём вовсе.
+ *    а не family-filter: moderate/strict/none туда слать нельзя — не шлём вовсе;
+ *  - additional= (доп. SERP-блоки Google: knowledge_graph, localresultsplace, rs и др.)
+ *    — только Google и только первая страница; наполнение блоков зависит от платных опций
+ *    кабинета XMLRiver, разбор <addresults> — в ./additional.js (непришедшие блоки
+ *    перечисляются в unavailable).
  */
 import { CostLogger, fetchText, getConfig, requireEnv, resolveRegionId, sleep } from '@seo-tools/shared';
 import { asArray, parseDocs, parseXml, type SerpDoc, stripTags } from '@seo-tools/shared/serp';
+import { type AdditionalParam, type AdditionalSection, parseAddResults } from './additional.js';
 import { resolveDomainId } from './geo.js';
 
 export const GOOGLE_URL = 'https://xmlriver.com/search/xml';
@@ -231,6 +236,8 @@ export interface SerpCollection {
   ai: boolean;
   /** полный AI Overview (ai=1, платный) — только если запрошен aiOverview */
   aiOverview?: AiOverview;
+  /** доп. SERP-блоки Google (additional=) — только если запрошен additional */
+  additional?: AdditionalSection;
 }
 
 /**
@@ -238,6 +245,8 @@ export interface SerpCollection {
  * groupby у XMLRiver мёртв (всегда 10/страницу) — не шлём; Google page с 1, Яндекс page с 0.
  * aiOverview=true добавляет ai=1 (ПЛАТНЫЙ параметр) только в запрос первой страницы —
  * answer один на запрос, размножать доплату на все страницы пагинации незачем.
+ * additional — то же правило: блоки <addresults> приходят с первой страницей, на остальные
+ * страницы пагинации параметр не размножаем (и не тарифицируем повторно).
  */
 export async function collectSerp(
   base: string,
@@ -245,6 +254,7 @@ export async function collectSerp(
   depth: number,
   account?: string,
   aiOverview = false,
+  additional?: AdditionalParam[],
 ): Promise<SerpCollection> {
   const firstPage = base === YANDEX_URL ? 0 : 1;
   // +1 страница добора: органики на странице бывает <10
@@ -256,9 +266,19 @@ export async function collectSerp(
   let empty = false;
   let ai = false;
   let overview: AiOverview | undefined;
+  let additionalSection: AdditionalSection | undefined;
 
   for (let i = 0; i < maxPages && results.length < depth; i++) {
-    const doc = await xmlriverGet(base, { ...common, page: firstPage + i, ...(i === 0 && aiOverview ? { ai: 1 } : {}) }, account);
+    const doc = await xmlriverGet(
+      base,
+      {
+        ...common,
+        page: firstPage + i,
+        ...(i === 0 && aiOverview ? { ai: 1 } : {}),
+        ...(i === 0 && additional?.length ? { additional: additional.join(',') } : {}),
+      },
+      account,
+    );
     const parsed = parseDocs(doc);
     if (i === 0) {
       packs = parsed.packs;
@@ -267,6 +287,7 @@ export async function collectSerp(
       empty = isEmptySerp(doc);
       ai = aiPresent(doc);
       if (aiOverview) overview = parseAiOverview(doc);
+      if (additional?.length) additionalSection = parseAddResults(doc, additional);
     }
     // перенумеровываем сквозняком
     for (const d of parsed.docs) {
@@ -285,6 +306,7 @@ export async function collectSerp(
     truncated: results.length < depth,
     ai,
     ...(overview ? { aiOverview: overview } : {}),
+    ...(additionalSection ? { additional: additionalSection } : {}),
   };
 }
 

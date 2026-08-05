@@ -6,4 +6,4 @@
 
 export { docsOf, passages } from './helpers.js';
 export { parseDocs, type SerpDoc } from './parse.js';
-export { asArray, domainOf, extractBolds, parseXml, stripTags } from './xml.js';
+export { asArray, decodeEntities, domainOf, extractBolds, parseXml, stripTags } from './xml.js';

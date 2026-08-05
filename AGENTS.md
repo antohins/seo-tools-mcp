@@ -57,6 +57,7 @@
     xmlstock/xmlriver), `wordstat.ts` (xmlstock: wordstatGet/даты/кэш регионов; wordstat:
     HTTP-слой/валидация/кэш), `queries.ts` (ywm), `utils.ts` (metrika), `logic.ts` +
     `paginate.ts` + `loopback.ts` (gsc), `client.ts` + `parse.ts` (aparser), `verticals.ts`,
+    `suggest.ts` + `related.ts` + `geo.ts` + `data.ts` + `additional.ts` (xmlriver),
     `filters.ts`, `regions.ts`. **Новую чистую логику класть в модуль, а не
     инлайнить в `index.ts`** — иначе её нельзя юнит-тестировать.
   - `Dockerfile` (сборка через `pnpm deploy`, production-образ) и `server.json` (манифест
@@ -174,6 +175,14 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
   макс. 50; `title`/`snippet`/`url` приходят пустыми, пока в кабинете не включена платная
   опция «Related Questions с ответами» (вопросы парсятся всегда) — пустые ответы помечаются
   `answers_available: false`; нет PAA-блока → код 15 (тарифицируется, `empty: true`).
+  Доп. SERP-блоки Google (`xmlriver_serp`, `includeAdditional` → `additional=knowledge_graph,...`,
+  лайв 2026-08): блоки приходят в `<response><addresults>`; наполнение зависит от платных опций
+  кабинета XMLRiver («Платные дополнительные параметры») и наличия блока в выдаче — на тестовом
+  аккаунте `knowledge_graph` пришёл с ПУСТЫМИ полями, `localresultsplace`/`rs`/`g_discuss`/
+  `faqsnippet` не пришли вовсе; непришедшие перечисляются в `additional.unavailable`.
+  Только engine=google, параметр шлётся на первой странице пагинации (как ai=1); парсинг —
+  `servers/xmlriver/src/additional.ts` (KG — плоские поля + reviews/events + `<point lat lng>`,
+  rs → relatedSearches, остальные блоки — флаг `{ present: true }`).
 - **Wordstat (Yandex Cloud)**: квоты 10 rps / 100 запросов в час (429 ретраится); точная частота —
   операторы `"!слово !слово"`; данные — за последние 30 дней.
 - **GSC**: приоритет OAuth над service account; OAuth-токен видит все свойства аккаунта.

@@ -29,7 +29,14 @@
  *    country (числовой id страны, RU=2643); country автовыводится из города, явный перекрывает.
  *    Резолв города — через справочник geo.csv (~5 МБ, скачивается раз, кэш на диске
  *    ~/.config/seo-tools-mcp/cache/, TTL 7 дней), маппинги стран/доменов — ./data.js
- *    (см. ./geo.js). Яндексу loc/country НЕ шлём (его гео — region/lr).
+ *    (см. ./geo.js). Яндексу loc/country НЕ шлём (его гео — region/lr);
+ *  - доп. SERP-блоки Google (xmlriver_serp, includeAdditional → additional=knowledge_graph,...):
+ *    блоки приходят в <response><addresults> (knowledge_graph — плоские поля + отзывы/события,
+ *    localresultsplace — карточки карт, rs → relatedSearches — связанные запросы); наполнение
+ *    зависит от ПЛАТНЫХ опций кабинета XMLRiver и наличия блока в выдаче (лайв 2026-08: KG
+ *    пришёл с пустыми полями, остальное не пришло вовсе) — непришедшие перечисляются
+ *    в unavailable. Только Google, параметр шлётся на первой странице пагинации
+ *    (разбор — ./additional.js).
  * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода),
  * сбор подсказок — в ./suggest.js, сбор «Вопросов по теме» — в ./related.js.
  */
@@ -46,6 +53,7 @@ import {
   safeHandler,
 } from '@seo-tools/shared';
 import { z } from 'zod';
+import { ADDITIONAL_PARAMS } from './additional.js';
 import { resolveCountry, resolveLocation } from './geo.js';
 import { collectRelatedQuestions } from './related.js';
 import { buildSerpParams, buildVerticalParams, checkIndex, collectSerp, collectVertical, GOOGLE_URL, YANDEX_URL } from './serp.js';
@@ -120,6 +128,9 @@ server.registerTool(
       'ai_overview: { present } — флаг присутствия AI Overview у Google; при includeAIOverview=true — ' +
       '{ present, available, text?, links? } (полный текст AIO и цитируемые ссылки, ПЛАТНО — ai=1), ' +
       'results: [{ position, url, title, snippet, text_bolds }], serp_features: { sitelinks_top1, packs } }. ' +
+      'includeAdditional (только Google) — доп. SERP-блоки из <addresults> в поле additional: knowledge_graph, local_results, ' +
+      'related_searches, faq, для прочих — { present: true }; наполнение зависит от платных опций кабинета XMLRiver и наличия ' +
+      'блока в выдаче, непришедшие — в additional.unavailable. ' +
       'Пустая выдача (код 15) ТАРИФИЦИРУЕТСЯ и помечается { results: [], empty: true, note }. ' +
       'Гео-таргетинг Google (engine=google): location — локальная выдача по городу («Moscow»/«1011969» → loc), ' +
       'country — страна («RU»/«2643», автовыводится из города); применённое гео эхом возвращается в поле geo. ' +
@@ -154,6 +165,16 @@ server.registerTool(
         .describe(
           'ПЛАТНО (доп. тарификация XMLRiver), замедляет выдачу: полный текст Обзора от ИИ + цитируемые ссылки (ai=1). ' +
             'Только engine=google; для yandex параметр игнорируется и ai=1 не отправляется',
+        ),
+      includeAdditional: z
+        .array(z.enum(ADDITIONAL_PARAMS))
+        .optional()
+        .describe(
+          'Дополнительные SERP-блоки Google (additional=, только engine=google; для yandex игнорируется): ' +
+            'knowledge_graph — карточка знаний (поля, отзывы, события), localresultsplace — карточки карт (local_results), ' +
+            'rs — связанные запросы (related_searches), faqsnippet — FAQ (faq), остальные — флаг присутствия { present: true }. ' +
+            'ВАЖНО: наполнение блоков зависит от платных опций кабинета XMLRiver («Платные дополнительные параметры») и наличия ' +
+            'блока в выдаче; запрошенные, но не пришедшие блоки перечисляются в additional.unavailable. Шлётся только на первой странице',
         ),
       searchDomain: z
         .string()
@@ -195,6 +216,8 @@ server.registerTool(
 
     // ai=1 — только Google и только на первой странице (реализовано внутри collectSerp)
     const wantAio = isGoogle && args.includeAIOverview;
+    // additional= — тоже только Google и только первая страница; для yandex молча игнорируем
+    const wantAdditional = isGoogle ? args.includeAdditional : undefined;
     // args.country — строка из схемы, в params уходит число из geo (или undefined)
     const collected = await collectSerp(
       base,
@@ -202,6 +225,7 @@ server.registerTool(
       args.depth,
       args.account,
       wantAio,
+      wantAdditional,
     );
     let results = collected.results;
     if (args.excludeAggregators) {
@@ -221,6 +245,8 @@ server.registerTool(
       found: collected.found,
       truncated: collected.truncated,
       ai_overview: isGoogle ? (wantAio ? collected.aiOverview : { present: collected.ai }) : false,
+      // доп. SERP-блоки Google (additional=) — только когда запрошены
+      ...(collected.additional ? { additional: collected.additional } : {}),
       // код 15 — пустая выдача: деньги списаны, явно помечаем, чтобы не путать с «нет данных»
       ...(collected.empty ? { empty: true, note: 'пустая выдача (код 15), запрос тарифицирован' } : {}),
       count: results.length,

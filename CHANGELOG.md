@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **xmlriver**: `xmlriver_serp` gained `includeAdditional` — extra Google SERP blocks via the
+  `additional=` API parameter (Google only, sent on the first SERP page only, like `ai=1`).
+  Blocks arrive inside `<response><addresults>` and are parsed into the response field
+  `additional`: `knowledge_graph` (flat fields normalized to snake_case, `reviews`/`events`
+  arrays, `coordinates` from `<point lat lng>`), `local_results` (`localresultsplace/item`
+  cards), `related_searches` (`rs` → `relatedSearches/query/title`), `faq` (`faqsnippet`;
+  structure per docs, not live-verified); other requested blocks are reported as
+  `{ present: true }`. Block content depends on the PAID options enabled in the XMLRiver
+  dashboard ("Платные дополнительные параметры") and on the block being present in the SERP —
+  requested but missing blocks are listed in `additional.unavailable`, fully empty ones are
+  marked `empty: true`. Parsing lives in `servers/xmlriver/src/additional.ts`.
+
 ## [1.4.0] — 2026-08-04
 
 ### Added

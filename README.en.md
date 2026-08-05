@@ -43,7 +43,7 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 > Wordstat via XMLStock uses the same `XMLSTOCK_*` key as SERP — **no Yandex Cloud setup** needed (unlike the standalone `wordstat` server).
 
 ### xmlriver — Google/Yandex SERP + indexation check
-- `xmlriver_serp` — Google/Yandex organic SERP (depth collected by pagination: every 10 positions = 1 paid request), AI-Overview presence flag; `includeAIOverview` option — full AI Overview text + cited links (paid `ai=1`, Google only); Google geo-targeting — `location` (city → `loc`, "Moscow"/"1011969") and `country` (ISO/numeric id, auto-derived from the city)
+- `xmlriver_serp` — Google/Yandex organic SERP (depth collected by pagination: every 10 positions = 1 paid request), AI-Overview presence flag; `includeAIOverview` option — full AI Overview text + cited links (paid `ai=1`, Google only); `includeAdditional` — extra Google SERP blocks from `<addresults>` (knowledge_graph, localresultsplace, rs, etc.; block content depends on paid options enabled in the XMLRiver dashboard, missing blocks are listed in `additional.unavailable`); Google geo-targeting — `location` (city → `loc`, "Moscow"/"1011969") and `country` (ISO/numeric id, auto-derived from the city)
 - `xmlriver_images` — Google image search (page url + image url + title + source + dimensions)
 - `xmlriver_news` — Google news (title, source, date, snippet), time filter
 - `xmlriver_check_index` — check whether a URL is indexed in Google/Yandex (`inindex`)
