@@ -194,6 +194,16 @@ describe('collectSerp: groupby официального Яндекс XML', () =>
     expect(r.truncated).toBe(false);
   });
 
+  it('неполная первая страница (docs<groupby) → СТОП без лишнего платного запроса', async () => {
+    // depth=100, но реально 55 результатов: страница 0 отдаёт 55 (<100) → добора быть НЕ должно
+    const fetch = vi.fn().mockResolvedValue(fakeRes(serpXml(docXml(55), '<found priority="all">55</found>')));
+    vi.stubGlobal('fetch', fetch);
+    const r = await collectSerp(YANDEX_XML, { query: 'x', lr: 213 }, 100, undefined, { groupby: 100, cost: yandexXmlCost });
+    expect(fetch).toHaveBeenCalledTimes(1); // ключевое: НЕ ушёл второй платный запрос page=1
+    expect(r.results).toHaveLength(55);
+    expect(r.truncated).toBe(true); // 55 < depth 100
+  });
+
   it('код 15 → empty=true, запрос тарифицирован', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fakeRes(errXml(15, 'ничего не найдено'))));
     const r = await collectSerp(YANDEX_XML, { query: 'x', lr: 213 }, 10, undefined, { groupby: 10, cost: yandexXmlCost });

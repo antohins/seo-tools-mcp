@@ -36,8 +36,9 @@ export interface MapPlace {
   review?: string;
   /** сервисы заведения (поле possibility «Еда в заведении ⋅ Доставка» → массив) */
   features?: string[];
-  lat: number;
-  lng: number;
+  /** координаты — опциональны: item с названием, но без валидных координат не подставляет 0,0 */
+  lat?: number;
+  lng?: number;
   place_id?: string;
   reviews_count?: number;
   /** доступность для маломобильных (в XML — «true»/«false») */
@@ -84,7 +85,9 @@ export function parseMaps(doc: any): MapPlace[] {
     const lng = numOr(it?.longitude);
     // item без названия и без координат — мусор, пропускаем
     if (!title && (lat === undefined || lng === undefined)) continue;
-    const place: MapPlace = { title: title ?? '', lat: lat ?? 0, lng: lng ?? 0 };
+    const place: MapPlace = { title: title ?? '' };
+    if (lat !== undefined) place.lat = lat;
+    if (lng !== undefined) place.lng = lng;
     const stars = numOr(it?.stars);
     if (stars !== undefined) place.stars = stars;
     const type = strOr(it?.type);

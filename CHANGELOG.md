@@ -4,7 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0] — 2026-08-05
+## [Unreleased]
+
+## [1.5.1] — 2026-08-07
+
+### Fixed
+- **xmlstock** (billing): the `yandex_xml` engine no longer fires an extra paid page. The
+  pagination loop stopped only on a zero-doc page, so any query whose result count was below the
+  requested `depth` (common with `groupby=100`) spent one extra premium request that returned
+  nothing. For `yandex_xml` a partial page (`docs < pageSize`) is now treated as the last page;
+  live Google/Yandex engines keep the zero-doc stop (Google legitimately returns 9 on a full page).
+- **xmlriver**: `xmlriver_serp` additional blocks (`includeAdditional`) now strip markup from
+  stopNode fields (`title`/`question`) — e.g. `Cafe <b>Nero</b>` no longer leaks raw tags into the
+  output; `additional.ts` now uses `stripTags` like `maps.ts` already did.
+- **xmlriver**: `xmlriver_maps` no longer plots a coordinate-less place at `0,0`. `lat`/`lng` are
+  now optional and omitted when the item has no valid coordinates (a title-only place keeps its
+  title without fake Null-Island coordinates).
+- **release**: the 1.5.0 release commit bumped `package.json` and the `McpServer` version literals
+  but left `servers/*/server.json` (×7) and `.plugin/plugin.json` at 1.4.0, so the MCP Registry
+  and the plugin channel never received 1.5.0. All channels are re-synchronized at 1.5.1; the
+  registry goes straight to 1.5.1.
+
+## [1.5.0] — 2026-08-07
 
 ### Added
 - **gsc**: `gsc_query` gained arbitrary dimension filters (`filters` → `dimensionFilterGroups`,
@@ -412,7 +433,9 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.2.0...v1.2.1

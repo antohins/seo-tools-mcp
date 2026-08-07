@@ -1,7 +1,7 @@
 {
   "name": "seo-tools-mcp-aparser",
   "mcpName": "io.github.antohins/seo-tools-mcp-aparser",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "MCP server bridging a self-hosted A-Parser instance: SERP, suggests and hundreds of parsers via its HTTP API",
   "license": "MIT",
   "author": "antohins",

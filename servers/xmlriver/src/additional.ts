@@ -21,7 +21,7 @@
  * Ключи ответа нормализованы в snake_case: countReviews → reviews_count,
  * timework → working_hours, pricecategory → price_category, upComingEvents → events.
  */
-import { asArray, decodeEntities } from '@seo-tools/shared/serp';
+import { asArray, decodeEntities, stripTags } from '@seo-tools/shared/serp';
 
 /** Значения параметра additional= по доке XMLRiver (только Google). */
 export const ADDITIONAL_PARAMS = [
@@ -53,7 +53,9 @@ const ELEMENT_NAME: Partial<Record<AdditionalParam, string>> = {
 
 /** Непустая строка или undefined (пустые поля блоков честно выкидываем; entities декодируем — title/question приходят stopNode-сырьём). */
 function str(v: unknown): string | undefined {
-  const s = typeof v === 'string' ? decodeEntities(v).trim() : typeof v === 'number' ? String(v) : '';
+  // title/question приходят stopNode'ами (сырой XML с дочерними тегами) — снимаем разметку,
+  // как это делает maps.ts (иначе «Cafe <b>Nero</b>» протекает в вывод).
+  const s = typeof v === 'string' ? stripTags(decodeEntities(v)).trim() : typeof v === 'number' ? String(v) : '';
   return s || undefined;
 }
 

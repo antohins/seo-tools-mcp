@@ -81,7 +81,7 @@ const aggregators = (): string[] =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-const server = new McpServer({ name: 'xmlriver', version: '1.5.0' });
+const server = new McpServer({ name: 'xmlriver', version: '1.5.1' });
 
 registerAuthTools(
   server,

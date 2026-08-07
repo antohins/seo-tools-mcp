@@ -224,7 +224,10 @@ export async function collectSerp(
       d.position = results.length + 1;
       results.push(d);
     }
-    if (!parsed.docs.length) break; // выдача кончилась
+    // выдача кончилась: 0 документов, либо (у yandex_xml с groupby) неполная страница —
+    // частичная страница = последняя, добор ещё одной страницы был бы лишним ПЛАТНЫМ запросом.
+    // У live-движков (pageSize=10) так делать нельзя: Google легально отдаёт 9 на неполной странице.
+    if (!parsed.docs.length || (opts?.groupby && parsed.docs.length < pageSize)) break;
   }
   results = results.slice(0, depth);
   return { results, found, foundDocs, foundHuman, features, packs, sitelinksTop1, empty, truncated: results.length < depth };
