@@ -206,6 +206,41 @@ describe('createGeoIndexLoader', () => {
   });
 });
 
+describe('resolveGeo', () => {
+  it('оба входа пустые → undefined (поле geo в ответе не эхим)', async () => {
+    await expect(geo.resolveGeo()).resolves.toBeUndefined();
+    await expect(geo.resolveGeo(undefined, undefined)).resolves.toBeUndefined();
+  });
+
+  it('только country → { country } БЕЗ сети', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('сеть запрещена в тесте'));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      await expect(geo.resolveGeo(undefined, 'RU')).resolves.toEqual({ country: 2643 });
+      await expect(geo.resolveGeo(undefined, '2643')).resolves.toEqual({ country: 2643 });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('числовой location → { loc } БЕЗ сети; с country — оба', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('сеть запрещена в тесте'));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      await expect(geo.resolveGeo('1011969')).resolves.toEqual({ loc: 1011969 });
+      await expect(geo.resolveGeo('1011969', 'US')).resolves.toEqual({ loc: 1011969, country: 2840 });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('имя города → loc + автовывод country (in-memory кэш geo.csv уже прогрет выше)', async () => {
+    await expect(geo.resolveGeo('Saint Petersburg')).resolves.toEqual({ loc: 1012040, country: 2643 });
+  });
+});
+
 describe('buildSerpParams (гео-интеграция)', () => {
   const base = {
     query: 'x',

@@ -24,12 +24,20 @@
  *    count ОБЯЗАТЕЛЕН (без него ошибка 15), макс. 50. Вопросы (question) парсятся всегда;
  *    title/snippet/url ПУСТЫЕ, пока в кабинете XMLRiver не включена платная опция
  *    «Related Questions с ответами». Нет PAA-блока → код 15 (тарифицируется, empty: true);
- *  - гео-таргетинг Google (xmlriver_serp/xmlriver_suggest, лайв 2026-08): location (город →
+ *  - гео-таргетинг Google (xmlriver_serp/xmlriver_suggest/xmlriver_images/xmlriver_news,
+ *    лайв 2026-08): location (город →
  *    loc, Google criteria ID — работает: 1011969 Москва / 1012040 СПб дают разную выдачу) и
  *    country (числовой id страны, RU=2643); country автовыводится из города, явный перекрывает.
  *    Резолв города — через справочник geo.csv (~5 МБ, скачивается раз, кэш на диске
  *    ~/.config/seo-tools-mcp/cache/, TTL 7 дней), маппинги стран/доменов — ./data.js
  *    (см. ./geo.js). Яндексу loc/country НЕ шлём (его гео — region/lr);
+ *  - устройства: device — desktop/mobile/tablet; os (ios/android) по доке работает ТОЛЬКО
+ *    при device=mobile — для остальных device параметр не отправляется;
+ *  - поиск заведений по Google Maps (xmlriver_maps): GET setab=maps с обязательными zoom (1–15)
+ *    и coords (lat,lng), опциональные count (5–50) и lr; ответ — <maps><item>
+ *    (разбор — ./maps.js). ВАЖНО: формат по доке, лайвом НЕ подтверждён — на тестовом
+ *    аккаунте (2026-08) эндпоинт стабильно отвечает кодом 500 (обычный SERP работает):
+ *    вероятно, нужна платная опция кабинета;
  *  - доп. SERP-блоки Google (xmlriver_serp, includeAdditional → additional=knowledge_graph,...):
  *    блоки приходят в <response><addresults> (knowledge_graph — плоские поля + отзывы/события,
  *    localresultsplace — карточки карт, rs → relatedSearches — связанные запросы); наполнение
@@ -38,7 +46,8 @@
  *    в unavailable. Только Google, параметр шлётся на первой странице пагинации
  *    (разбор — ./additional.js).
  * HTTP-слой SERP и хелперы выдачи — в ./serp.js (там же ретраи и учёт расхода),
- * сбор подсказок — в ./suggest.js, сбор «Вопросов по теме» — в ./related.js.
+ * сбор подсказок — в ./suggest.js, сбор «Вопросов по теме» — в ./related.js,
+ * поиск заведений по картам — в ./maps.js.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -54,7 +63,8 @@ import {
 } from '@seo-tools/shared';
 import { z } from 'zod';
 import { ADDITIONAL_PARAMS } from './additional.js';
-import { resolveCountry, resolveLocation } from './geo.js';
+import { resolveGeo } from './geo.js';
+import { collectMaps, mapsCoordsSchema } from './maps.js';
 import { collectRelatedQuestions } from './related.js';
 import { buildSerpParams, buildVerticalParams, checkIndex, collectSerp, collectVertical, GOOGLE_URL, YANDEX_URL } from './serp.js';
 import { collectSuggest, suggestPhrasesSchema } from './suggest.js';
@@ -119,6 +129,14 @@ const geoCountryParam = (scope: string) =>
         'Без location — задаёт страну отдельно; с location — перекрывает автовыведенную из города',
     );
 
+// device: desktop/mobile/tablet. os (ios/android) по доке работает ТОЛЬКО при device=mobile —
+// для остальных device параметр в API не отправляется (см. buildSerpParams/buildVerticalParams).
+const deviceParam = z.enum(['desktop', 'mobile', 'tablet']).default('desktop');
+const osParam = z
+  .enum(['ios', 'android'])
+  .optional()
+  .describe('ОС устройства: отправляется ТОЛЬКО при device=mobile (по доке os работает только с mobile); для desktop/tablet игнорируется');
+
 server.registerTool(
   'xmlriver_serp',
   {
@@ -138,7 +156,8 @@ server.registerTool(
     inputSchema: {
       query: z.string().min(1),
       engine: z.enum(['google', 'yandex']).default('google'),
-      device: z.enum(['desktop', 'mobile']).default('desktop'),
+      device: deviceParam,
+      os: osParam,
       region: serpRegionParam,
       location: geoLocationParam('только engine=google; для yandex игнорируется — гео Яндекса задаётся region/lr'),
       country: geoCountryParam('только engine=google; для yandex игнорируется'),
@@ -205,14 +224,7 @@ server.registerTool(
 
     // Гео-таргетинг Google: location → loc (+ автовывод country из города), явный country
     // перекрывает автовывод. Для yandex не применяется — там гео задаёт region/lr.
-    let geo: { loc?: number; country?: number; note?: string } | undefined;
-    if (isGoogle) {
-      if (args.location) {
-        geo = await resolveLocation(args.location, args.country);
-      } else if (args.country) {
-        geo = { country: resolveCountry(args.country) };
-      }
-    }
+    const geo = isGoogle ? await resolveGeo(args.location, args.country) : undefined;
 
     // ai=1 — только Google и только на первой странице (реализовано внутри collectSerp)
     const wantAio = isGoogle && args.includeAIOverview;
@@ -271,7 +283,10 @@ const verticalInput = {
     .max(100)
     .default(20)
     .describe('Сколько результатов собрать; пагинация — каждые ~10 результатов = 1 платный запрос'),
-  device: z.enum(['desktop', 'mobile']).default('desktop'),
+  device: deviceParam,
+  os: osParam,
+  location: geoLocationParam('вертикали Google-only, гейта по engine нет'),
+  country: geoCountryParam('вертикали Google-only'),
   searchDomain: z
     .string()
     .regex(/^[a-z]{2,3}(\.[a-z]{2,3})?$/)
@@ -286,16 +301,19 @@ server.registerTool(
     description:
       'Поиск по картинкам Google через XMLRiver (ПЛАТНО: каждые ~10 результатов = 1 платный запрос, пагинация). ' +
       'Возвращает { position, url (страница-источник), imageUrl (сама картинка), title, source, width, height }. ' +
-      'truncated: true = выдача кончилась раньше запрошенного depth.',
+      'Гео-таргетинг: location (город → loc, «Moscow»/«1011969») и country («RU»/«2643», автовыводится из города); ' +
+      'применённое гео эхом возвращается в поле geo. truncated: true = выдача кончилась раньше запрошенного depth.',
     inputSchema: verticalInput,
   },
   safeHandler(async (args) => {
-    const common = { ...buildVerticalParams(args), setab: 'images' };
+    const geo = await resolveGeo(args.location, args.country);
+    const common = { ...buildVerticalParams({ ...args, loc: geo?.loc, country: geo?.country }), setab: 'images' };
     const { results, found, empty, truncated } = await collectVertical(common, args.depth, parseImages, args.account);
     return jsonResult({
       query: args.query,
       vertical: 'images',
       region: args.region,
+      ...(geo ? { geo } : {}),
       found,
       truncated,
       ...(empty ? { empty: true, note: 'пустая выдача (код 15), запрос тарифицирован' } : {}),
@@ -311,17 +329,23 @@ server.registerTool(
     description:
       'Поиск по новостям Google через XMLRiver (ПЛАТНО: каждые ~10 результатов = 1 платный запрос, пагинация). ' +
       'Возвращает { position, url, title, source (издание), date (часто относительная), snippet }. ' +
-      'truncated: true = выдача кончилась раньше запрошенного depth. period — фильтр по времени (tbs).',
+      'Гео-таргетинг: location (город → loc, «Moscow»/«1011969») и country («RU»/«2643», автовыводится из города); ' +
+      'применённое гео эхом возвращается в поле geo. truncated: true = выдача кончилась раньше запрошенного depth. period — фильтр по времени (tbs).',
     inputSchema: { ...verticalInput, period: z.string().optional().describe('Google tbs: qdr:h/qdr:d/qdr:w/qdr:m/qdr:y') },
   },
   safeHandler(async (args) => {
-    const common: Record<string, string | number | undefined> = { ...buildVerticalParams(args), setab: 'news' };
+    const geo = await resolveGeo(args.location, args.country);
+    const common: Record<string, string | number | undefined> = {
+      ...buildVerticalParams({ ...args, loc: geo?.loc, country: geo?.country }),
+      setab: 'news',
+    };
     if (args.period) common.tbs = args.period;
     const { results, found, empty, truncated } = await collectVertical(common, args.depth, parseNews, args.account);
     return jsonResult({
       query: args.query,
       vertical: 'news',
       region: args.region,
+      ...(geo ? { geo } : {}),
       found,
       truncated,
       ...(empty ? { empty: true, note: 'пустая выдача (код 15), запрос тарифицирован' } : {}),
@@ -374,12 +398,7 @@ server.registerTool(
   },
   safeHandler(async (args) => {
     // гео Google-подсказок: location → loc (+ автовывод country), явный country перекрывает
-    let geo: { loc?: number; country?: number; note?: string } | undefined;
-    if (args.location) {
-      geo = await resolveLocation(args.location, args.country);
-    } else if (args.country) {
-      geo = { country: resolveCountry(args.country) };
-    }
+    const geo = await resolveGeo(args.location, args.country);
     const result = await collectSuggest(args.phrases, args.region, args.account, geo);
     return jsonResult({ ...result, ...(geo ? { geo } : {}) });
   }),
@@ -405,11 +424,37 @@ server.registerTool(
         .default(10)
         .describe('Сколько вопросов собрать; count — обязательный параметр API XMLRiver (без него ошибка 15), максимум 50'),
       region: z.string().optional().describe('«Москва»/«Россия»/213/225 — ОДИН регион (название или id Яндекса, lr); без него — без гео'),
-      device: z.enum(['desktop', 'mobile']).default('desktop'),
+      device: deviceParam,
+      os: osParam,
       account: accountParam,
     },
   },
-  safeHandler(async (args) => jsonResult(await collectRelatedQuestions(args.query, args.count, args.region, args.device, args.account))),
+  safeHandler(async (args) =>
+    jsonResult(await collectRelatedQuestions(args.query, args.count, args.region, args.device, args.os, args.account)),
+  ),
+);
+
+server.registerTool(
+  'xmlriver_maps',
+  {
+    description:
+      'Поиск заведений по Google Maps через XMLRiver (setab=maps, ПЛАТНО за запрос). ' +
+      'Обязательные query + coords (широта,долгота) + zoom (1–15); count (5–50) — сколько заведений вернуть. ' +
+      'Возвращает { places: [{ title, stars?, type?, address?, url?, phone?, review?, features? (сервисы заведения), ' +
+      'lat, lng, place_id?, reviews_count?, accessibility?, price? }], count, found, empty? }. ' +
+      'Пустая выдача (код 15) ТАРИФИЦИРУЕТСЯ и помечается { places: [], empty: true, note }. ' +
+      'ВАЖНО: формат ответа — по доке XMLRiver, лайвом не подтверждён (на тестовом аккаунте эндпоинт устойчиво ' +
+      'отвечает кодом 500 — вероятно, требуется платная опция кабинета XMLRiver).',
+    inputSchema: {
+      query: z.string().min(1).describe('Что ищем на картах («кафе», «стоматология»…)'),
+      coords: mapsCoordsSchema.describe('Координаты центра поиска: «широта,долгота», например «51.5468,45.9968»'),
+      zoom: z.number().int().min(1).max(15).describe('Масштаб карты (1–15), обязательный параметр API'),
+      count: z.number().int().min(5).max(50).default(20).describe('Сколько заведений вернуть (5–50)'),
+      region: z.string().optional().describe('«Москва»/«Россия»/213/225 — ОДИН регион (название или id Яндекса, lr); без него — без гео'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => jsonResult(await collectMaps(args.query, args.coords, args.zoom, args.count, args.region, args.account))),
 );
 
 server.registerTool(

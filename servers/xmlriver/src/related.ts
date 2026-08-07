@@ -13,7 +13,7 @@
  *  - HTTP-ретраи/коды/учёт расхода — общие, в xmlriverGet из ./serp.js.
  */
 import { asArray, stripTags } from '@seo-tools/shared/serp';
-import { GOOGLE_URL, isEmptySerp, resolveLr, xmlriverGet } from './serp.js';
+import { type Device, GOOGLE_URL, isEmptySerp, resolveLr, xmlriverGet } from './serp.js';
 
 export interface RelatedQuestion {
   /** текст вопроса (приходит всегда) */
@@ -63,18 +63,21 @@ export function parseRelatedQuestions(doc: any): RelatedQuestion[] {
 /**
  * Один GET setab=rq. count — обязательный параметр API (валидируется zod в index.ts: 1–50).
  * Код 15 (нет PAA-блока) → empty: true, запрос тарифицирован (списание трекает xmlriverGet).
+ * os (ios/android) шлём только при device=mobile — по доке os работает только с mobile.
  */
 export async function collectRelatedQuestions(
   query: string,
   count: number,
   region?: string,
-  device?: 'desktop' | 'mobile',
+  device?: Device,
+  os?: 'ios' | 'android',
   account?: string,
 ): Promise<RelatedQuestionsResult> {
   const params: Record<string, string | number | undefined> = { setab: 'rq', count, query };
   const lr = resolveLr(region);
   if (lr !== undefined) params.lr = lr;
   if (device) params.device = device;
+  if (device === 'mobile' && os) params.os = os;
 
   const doc = await xmlriverGet(GOOGLE_URL, params, account);
   if (isEmptySerp(doc)) {

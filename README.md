@@ -16,7 +16,7 @@
 | Сервер | Рабочие инструменты | Авторизация |
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_wordstat`, `xmlstock_wordstat_dynamics`, `xmlstock_wordstat_regions`, `xmlstock_wordstat_regions_tree`, `xmlstock_balance` | API-ключ |
-| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API-ключ |
+| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
@@ -41,9 +41,10 @@
 > Wordstat через XMLStock — тем же ключом `XMLSTOCK_*`, что и SERP; **не нужен Yandex Cloud** (в отличие от отдельного сервера `wordstat`).
 
 ### xmlriver — SERP Google/Яндекс + проверка индексации
-- `xmlriver_serp` — органика Google/Яндекса (глубина добирается пагинацией: каждые 10 позиций = 1 платный запрос), флаг наличия AI Overview; опция `includeAIOverview` — полный текст Обзора от ИИ + цитируемые ссылки (платный `ai=1`, только Google); `includeAdditional` — доп. SERP-блоки Google из `<addresults>` (knowledge_graph, localresultsplace, rs и др.; наполнение зависит от платных опций кабинета XMLRiver, непришедшие блоки — в `additional.unavailable`); гео-таргетинг Google — `location` (город → `loc`, «Moscow»/«1011969») и `country` (ISO/числовой id, автовыводится из города)
-- `xmlriver_images` — картинки Google (страница + url картинки + заголовок + источник + размеры)
-- `xmlriver_news` — новости Google (заголовок, источник, дата, сниппет), фильтр по времени
+- `xmlriver_serp` — органика Google/Яндекса (глубина добирается пагинацией: каждые 10 позиций = 1 платный запрос), флаг наличия AI Overview; опция `includeAIOverview` — полный текст Обзора от ИИ + цитируемые ссылки (платный `ai=1`, только Google); `includeAdditional` — доп. SERP-блоки Google из `<addresults>` (knowledge_graph, localresultsplace, rs и др.; наполнение зависит от платных опций кабинета XMLRiver, непришедшие блоки — в `additional.unavailable`); гео-таргетинг Google — `location` (город → `loc`, «Moscow»/«1011969») и `country` (ISO/числовой id, автовыводится из города); `device` — desktop/mobile/tablet, `os` (ios/android) отправляется только при `device=mobile`
+- `xmlriver_images` — картинки Google (страница + url картинки + заголовок + источник + размеры); гео — `location`/`country`
+- `xmlriver_news` — новости Google (заголовок, источник, дата, сниппет), фильтр по времени; гео — `location`/`country`
+- `xmlriver_maps` — поиск заведений по Google Maps (`setab=maps`, обязательные `zoom` 1–15 и `coords` «широта,долгота», `count` 5–50): название, рейтинг, адрес, телефон, сервисы, координаты, place_id, число отзывов. ВАЖНО: формат по доке, лайвом не подтверждён (на тестовом аккаунте эндпоинт устойчиво отвечает кодом 500 — вероятно, нужна платная опция кабинета)
 - `xmlriver_check_index` — проверка индексации URL в Google/Яндексе (`inindex`)
 - `xmlriver_suggest` — поисковые подсказки Google (до 50 фраз за вызов, платно за каждую фразу); гео подсказок — `location`/`country`
 - `xmlriver_related_questions` — блок «Вопросы по теме» / People Also Ask Google (вопросы всегда; ответы — только при включённой платной опции «Related Questions с ответами» в кабинете)

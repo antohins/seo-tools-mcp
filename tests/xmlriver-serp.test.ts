@@ -340,6 +340,17 @@ describe('collectVertical', () => {
     expect(fetchParam(fetch, 0, 'page')).toBe('1');
     expect(fetchParam(fetch, 1, 'page')).toBe('2');
   });
+
+  it('вертикаль с гео: loc/country/device=tablet уходят в URL запроса', async () => {
+    const img = '<doc><url>https://p0.ru/</url><imgurl>https://p0.ru/i.jpg</imgurl></doc>';
+    const fetch = vi.fn().mockResolvedValue(fakeRes(serpXml(img)));
+    vi.stubGlobal('fetch', fetch);
+    await serp.collectVertical({ query: 'x', setab: 'images', device: 'tablet', loc: 1011969, country: 2643 }, 5, verticals.parseImages);
+    expect(fetchParam(fetch, 0, 'loc')).toBe('1011969');
+    expect(fetchParam(fetch, 0, 'country')).toBe('2643');
+    expect(fetchParam(fetch, 0, 'device')).toBe('tablet');
+    expect(fetchParam(fetch, 0, 'setab')).toBe('images');
+  });
 });
 
 describe('buildSerpParams', () => {
@@ -373,6 +384,40 @@ describe('buildSerpParams', () => {
   it('groupby не отправляется', () => {
     expect(serp.buildSerpParams({ ...base, engine: 'google' }).groupby).toBeUndefined();
     expect(serp.buildSerpParams({ ...base, engine: 'yandex' }).groupby).toBeUndefined();
+  });
+
+  it('device=tablet уходит в запрос как есть', () => {
+    const p = serp.buildSerpParams({ ...base, engine: 'google', device: 'tablet' });
+    expect(p.device).toBe('tablet');
+  });
+
+  it('os шлём только при device=mobile; при desktop/tablet — не шлём', () => {
+    expect(serp.buildSerpParams({ ...base, engine: 'google', device: 'mobile', os: 'android' }).os).toBe('android');
+    expect(serp.buildSerpParams({ ...base, engine: 'google', device: 'mobile', os: 'ios' }).os).toBe('ios');
+    expect(serp.buildSerpParams({ ...base, engine: 'google', device: 'desktop', os: 'android' }).os).toBeUndefined();
+    expect(serp.buildSerpParams({ ...base, engine: 'google', device: 'tablet', os: 'ios' }).os).toBeUndefined();
+  });
+});
+
+describe('buildVerticalParams', () => {
+  it('loc/country проходят в параметры (гео вертикалей Google)', () => {
+    const p = serp.buildVerticalParams({ query: 'x', device: 'desktop', loc: 1011969, country: 2643 });
+    expect(p.loc).toBe(1011969);
+    expect(p.country).toBe(2643);
+  });
+
+  it('без гео loc/country отсутствуют; domain маппится в числовой id', () => {
+    const p = serp.buildVerticalParams({ query: 'x', device: 'desktop' });
+    expect(p.loc).toBeUndefined();
+    expect(p.country).toBeUndefined();
+    expect(p.domain).toBe(143);
+  });
+
+  it('device=tablet проходит; os — только при device=mobile', () => {
+    expect(serp.buildVerticalParams({ query: 'x', device: 'tablet' }).device).toBe('tablet');
+    expect(serp.buildVerticalParams({ query: 'x', device: 'mobile', os: 'ios' }).os).toBe('ios');
+    expect(serp.buildVerticalParams({ query: 'x', device: 'tablet', os: 'android' }).os).toBeUndefined();
+    expect(serp.buildVerticalParams({ query: 'x', device: 'desktop', os: 'android' }).os).toBeUndefined();
   });
 });
 

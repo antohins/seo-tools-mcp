@@ -366,10 +366,15 @@ export async function checkIndex(
   return { url, engine, indexed: Boolean(matched), matchedUrl: matched?.url ?? null, found: extractFound(doc) };
 }
 
+/** Устройство выдачи XMLRiver: desktop/mobile/tablet. os (ios/android) работает только при mobile. */
+export type Device = 'desktop' | 'mobile' | 'tablet';
+
 export interface SerpParamsArgs {
   query: string;
   engine: 'google' | 'yandex';
-  device: 'desktop' | 'mobile';
+  device: Device;
+  /** ОС устройства: шлём ТОЛЬКО при device=mobile (по доке os работает только с mobile) */
+  os?: 'ios' | 'android';
   region: string;
   searchDomain?: string;
   lang?: string;
@@ -394,6 +399,8 @@ export function buildSerpParams(args: SerpParamsArgs): Record<string, string | n
   const common: Record<string, string | number | undefined> = {
     query: args.query,
     device: args.device,
+    // os по доке работает только при device=mobile — для desktop/tablet не шлём
+    ...(args.device === 'mobile' && args.os ? { os: args.os } : {}),
     // Google: домен маппим в числовой id (дока требует число; неизвестный — строкой как раньше).
     // Яндексу оставляем строку ('ru' и т.п. — проверено лайвом).
     domain: isGoogle ? resolveDomainId(args.searchDomain ?? 'ru') : (args.searchDomain ?? 'ru'),
@@ -420,16 +427,28 @@ export function buildSerpParams(args: SerpParamsArgs): Record<string, string | n
   return common;
 }
 
-/** Параметры Google-вертикали (images/news): lr не шлём (у Google XMLRiver lr — код языка). */
+/**
+ * Параметры Google-вертикали (images/news): lr не шлём (у Google XMLRiver lr — код языка).
+ * Гео — loc/country (резолв в ./geo.js, вертикали Google-only — гейта по engine нет).
+ * os — только при device=mobile (по доке os работает только с mobile).
+ */
 export function buildVerticalParams(args: {
   query: string;
-  device: 'desktop' | 'mobile';
+  device: Device;
+  os?: 'ios' | 'android';
   searchDomain?: string;
+  /** Google criteria ID города (из resolveLocation) */
+  loc?: number;
+  /** числовой id страны XMLRiver (явный или автовывод из города) */
+  country?: number;
 }): Record<string, string | number | undefined> {
   return {
     query: args.query,
     device: args.device,
+    ...(args.device === 'mobile' && args.os ? { os: args.os } : {}),
     domain: resolveDomainId(args.searchDomain ?? 'ru'),
+    ...(args.loc !== undefined ? { loc: args.loc } : {}),
+    ...(args.country !== undefined ? { country: args.country } : {}),
   };
 }
 

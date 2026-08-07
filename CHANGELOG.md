@@ -36,6 +36,24 @@ All notable changes to this project are documented here. The format is based on
   dashboard ("Платные дополнительные параметры") and on the block being present in the SERP —
   requested but missing blocks are listed in `additional.unavailable`, fully empty ones are
   marked `empty: true`. Parsing lives in `servers/xmlriver/src/additional.ts`.
+- **xmlriver**: new tool `xmlriver_maps` — Google Maps place search via `setab=maps`
+  (mandatory `zoom` 1–15 and `coords` "lat,lng" — validated by a zod regex; optional `count`
+  5–50, default 20, and `region` → `lr`). Returns `{ places: [{ title, stars?, type?, address?,
+  url?, phone?, review?, features? (from `possibility`), lat, lng, place_id?, reviews_count?,
+  accessibility?, price? }], count, found, empty? }`; code 15 → `empty: true` (billed), same as
+  the other tools. IMPORTANT: the response format follows the XMLRiver docs but is NOT
+  live-verified — the endpoint steadily returns error code 500 on the test account (regular
+  SERP works), so a paid dashboard option is likely required; parsing is strictly defensive.
+  Pure parser `parseMaps` + `mapsCoordsSchema` live in `servers/xmlriver/src/maps.ts`.
+- **xmlriver**: `xmlriver_images` and `xmlriver_news` gained the same Google geo-targeting as
+  serp/suggest — `location` (city → `loc`) and `country` (ISO/numeric id, auto-derived from the
+  city), resolved via `servers/xmlriver/src/geo.ts` (`resolveLocation`/`resolveCountry`,
+  shared handler helper `resolveGeo`); the applied geo is echoed in the response `geo` field.
+  Verticals are Google-only, so there is no engine gate.
+- **xmlriver**: `device` enum extended with `tablet` (`xmlriver_serp`, `xmlriver_images`,
+  `xmlriver_news`, `xmlriver_related_questions`) and a new `os` parameter (`ios`/`android`) —
+  sent only when `device=mobile` (per the docs `os` works with mobile only; for other devices
+  it is not sent, which is documented in the parameter description).
 
 ## [1.4.0] — 2026-08-04
 

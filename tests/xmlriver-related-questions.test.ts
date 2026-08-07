@@ -130,6 +130,24 @@ describe('collectRelatedQuestions', () => {
     expect(fetchUrl(fetch, 1).searchParams.get('lr')).toBeNull();
   });
 
+  it('device=tablet уходит; os шлётся только при device=mobile', async () => {
+    const fetch = vi.fn().mockResolvedValue(fakeRes(rqXml(true, 1)));
+    vi.stubGlobal('fetch', fetch);
+
+    await related.collectRelatedQuestions('тест', 5, undefined, 'tablet');
+    expect(fetchUrl(fetch, 0).searchParams.get('device')).toBe('tablet');
+
+    await related.collectRelatedQuestions('тест', 5, undefined, 'mobile', 'android');
+    expect(fetchUrl(fetch, 1).searchParams.get('device')).toBe('mobile');
+    expect(fetchUrl(fetch, 1).searchParams.get('os')).toBe('android');
+
+    // desktop/tablet + os → os НЕ отправляется (по доке os работает только с mobile)
+    await related.collectRelatedQuestions('тест', 5, undefined, 'desktop', 'ios');
+    expect(fetchUrl(fetch, 2).searchParams.get('os')).toBeNull();
+    await related.collectRelatedQuestions('тест', 5, undefined, 'tablet', 'ios');
+    expect(fetchUrl(fetch, 3).searchParams.get('os')).toBeNull();
+  });
+
   it('код 15 (нет PAA-блока) → empty: true + note, запрос ТАРИФИЦИРОВАН', async () => {
     vi.stubGlobal(
       'fetch',

@@ -177,6 +177,26 @@ export function createGeoIndexLoader(opts: {
 // кэш рядом с конфигом: ~/.config/seo-tools-mcp/cache/xmlriver-geo.csv
 const loadGeoIndex = createGeoIndexLoader({ cacheFile: join(CONFIG_DIR, 'cache', 'xmlriver-geo.csv') });
 
+export interface GeoParams {
+  /** Google criteria ID местоположения (URL-параметр loc) */
+  loc?: number;
+  /** числовой id страны XMLRiver (URL-параметр country): явный либо выведенный из города */
+  country?: number;
+  /** пояснение при неоднозначности имени города */
+  note?: string;
+}
+
+/**
+ * Общий резолв гео-параметров Google для хендлеров: location → loc (+ автовывод country
+ * из города), явный country перекрывает автовывод; country без location — отдельно.
+ * Оба входа пустые → undefined (гео не задано, поле geo в ответе не эхим).
+ */
+export async function resolveGeo(location?: string, country?: string): Promise<GeoParams | undefined> {
+  if (location) return resolveLocation(location, country);
+  if (country) return { country: resolveCountry(country) };
+  return undefined;
+}
+
 export interface ResolvedGeo {
   /** Google criteria ID местоположения (URL-параметр loc) */
   loc: number;

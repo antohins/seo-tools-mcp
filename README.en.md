@@ -16,7 +16,7 @@ Seven **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, G
 | Server | Tools | Auth |
 |---|---|---|
 | `xmlstock` | `xmlstock_serp`, `xmlstock_images`, `xmlstock_news`, `xmlstock_video`, `xmlstock_wordstat`, `xmlstock_wordstat_dynamics`, `xmlstock_wordstat_regions`, `xmlstock_wordstat_regions_tree`, `xmlstock_balance` | API key |
-| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API key |
+| `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
@@ -43,9 +43,10 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 > Wordstat via XMLStock uses the same `XMLSTOCK_*` key as SERP — **no Yandex Cloud setup** needed (unlike the standalone `wordstat` server).
 
 ### xmlriver — Google/Yandex SERP + indexation check
-- `xmlriver_serp` — Google/Yandex organic SERP (depth collected by pagination: every 10 positions = 1 paid request), AI-Overview presence flag; `includeAIOverview` option — full AI Overview text + cited links (paid `ai=1`, Google only); `includeAdditional` — extra Google SERP blocks from `<addresults>` (knowledge_graph, localresultsplace, rs, etc.; block content depends on paid options enabled in the XMLRiver dashboard, missing blocks are listed in `additional.unavailable`); Google geo-targeting — `location` (city → `loc`, "Moscow"/"1011969") and `country` (ISO/numeric id, auto-derived from the city)
-- `xmlriver_images` — Google image search (page url + image url + title + source + dimensions)
-- `xmlriver_news` — Google news (title, source, date, snippet), time filter
+- `xmlriver_serp` — Google/Yandex organic SERP (depth collected by pagination: every 10 positions = 1 paid request), AI-Overview presence flag; `includeAIOverview` option — full AI Overview text + cited links (paid `ai=1`, Google only); `includeAdditional` — extra Google SERP blocks from `<addresults>` (knowledge_graph, localresultsplace, rs, etc.; block content depends on paid options enabled in the XMLRiver dashboard, missing blocks are listed in `additional.unavailable`); Google geo-targeting — `location` (city → `loc`, "Moscow"/"1011969") and `country` (ISO/numeric id, auto-derived from the city); `device` — desktop/mobile/tablet, `os` (ios/android) is sent only with `device=mobile`
+- `xmlriver_images` — Google image search (page url + image url + title + source + dimensions); geo via `location`/`country`
+- `xmlriver_news` — Google news (title, source, date, snippet), time filter; geo via `location`/`country`
+- `xmlriver_maps` — Google Maps place search (`setab=maps`, mandatory `zoom` 1–15 and `coords` "lat,lng", `count` 5–50): title, rating, address, phone, features, coordinates, place_id, review count. NOTE: format per the docs, not live-verified (the endpoint steadily returns error 500 on the test account — a paid dashboard option is likely required)
 - `xmlriver_check_index` — check whether a URL is indexed in Google/Yandex (`inindex`)
 - `xmlriver_suggest` — Google search suggestions (up to 50 phrases per call, billed per phrase); geo via `location`/`country`
 - `xmlriver_related_questions` — Google "People Also Ask" block (questions always returned; answers only with the paid "Related Questions with answers" option enabled in the XMLRiver dashboard)
