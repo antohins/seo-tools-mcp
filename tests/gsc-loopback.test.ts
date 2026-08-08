@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLoopbackManager, type OauthFlow } from '../servers/gsc/src/loopback.js';
+import { createLoopbackManager, type OauthFlow } from '../shared/src/google/loopback.js';
 
 // Таймер авто-закрытия loopback-приёмника: при переиспользовании listener новым flow
 // таймер ПЕРЕВЗВОДИТСЯ (баг: таймер брошенного flow1 убивал listener активного flow2),

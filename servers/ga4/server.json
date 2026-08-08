@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.antohins/seo-tools-mcp-gsc",
-  "title": "SEO Tools: Google Search Console",
-  "description": "Google Search Console: Search Analytics, URL Inspection, sitemaps (read-only, OAuth/service acct).",
+  "name": "io.github.antohins/seo-tools-mcp-ga4",
+  "title": "SEO Tools: Google Analytics 4",
+  "description": "Google Analytics 4: reports, traffic sources, landing pages, events, realtime (read-only).",
   "repository": {
     "url": "https://github.com/antohins/seo-tools-mcp",
     "source": "github"
@@ -12,7 +12,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "seo-tools-mcp-gsc",
+      "identifier": "seo-tools-mcp-ga4",
       "version": "1.6.0",
       "transport": {
         "type": "stdio"
@@ -20,7 +20,7 @@
       "environmentVariables": [
         {
           "name": "GOOGLE_CLIENT_ID",
-          "description": "Google OAuth client ID (Desktop app).",
+          "description": "Google OAuth client ID (Desktop app), shared with the gsc server.",
           "format": "string",
           "isRequired": false,
           "isSecret": false
@@ -33,29 +33,29 @@
           "isSecret": true
         },
         {
-          "name": "GSC_REFRESH_TOKEN",
-          "description": "Google OAuth refresh token (or obtain via gsc_oauth_start).",
+          "name": "GA4_REFRESH_TOKEN",
+          "description": "OAuth refresh token (obtained via ga4_oauth_start / ga4_oauth_finish).",
           "format": "string",
           "isRequired": false,
           "isSecret": true
         },
         {
-          "name": "GSC_SITE_URL",
-          "description": "Default GSC property, e.g. sc-domain:example.com.",
+          "name": "GA4_SA_JSON",
+          "description": "Path to a service-account JSON key (alternative to OAuth).",
           "format": "string",
           "isRequired": false,
           "isSecret": false
         },
         {
-          "name": "GSC_SA_JSON",
-          "description": "Path to a service-account JSON key (alternative auth path).",
+          "name": "GA4_PROPERTY_ID",
+          "description": "Default GA4 property id (numeric, e.g. 123456789).",
           "format": "string",
           "isRequired": false,
           "isSecret": false
         },
         {
-          "name": "GSC_OAUTH_PORT",
-          "description": "Localhost port for the OAuth loopback receiver (default 8585).",
+          "name": "GA4_OAUTH_PORT",
+          "description": "Loopback port for the OAuth flow (default 8586).",
           "format": "string",
           "isRequired": false,
           "isSecret": false

@@ -17,15 +17,15 @@ COPY servers/ga4/package.json servers/ga4/package.json
 COPY servers/ywm/package.json servers/ywm/package.json
 COPY servers/metrika/package.json servers/metrika/package.json
 # Install only this server and its workspace deps (not the whole monorepo).
-RUN pnpm install --frozen-lockfile --filter "seo-tools-mcp-xmlriver..."
+RUN pnpm install --frozen-lockfile --filter "seo-tools-mcp-ga4..."
 COPY . .
-RUN pnpm --filter "seo-tools-mcp-xmlriver..." build
-RUN pnpm --filter "seo-tools-mcp-xmlriver" --prod --legacy deploy /out
+RUN pnpm --filter "seo-tools-mcp-ga4..." build
+RUN pnpm --filter "seo-tools-mcp-ga4" --prod --legacy deploy /out
 
 # Minimal runtime: tini as PID 1 (proper signal handling), non-root, prod deps only.
 FROM node:22-alpine AS runtime
-LABEL org.opencontainers.image.title="seo-tools-mcp-xmlriver" \
-      org.opencontainers.image.description="MCP server for Google & Yandex SERP, verticals and indexation checks via XMLRiver (read-only)" \
+LABEL org.opencontainers.image.title="seo-tools-mcp-ga4" \
+      org.opencontainers.image.description="MCP server for Google Analytics 4 (read-only)" \
       org.opencontainers.image.source="https://github.com/antohins/seo-tools-mcp" \
       org.opencontainers.image.licenses="MIT"
 RUN apk add --no-cache tini

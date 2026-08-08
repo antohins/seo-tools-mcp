@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-import { randomUUID } from 'node:crypto';
-import { chmodSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 /**
  * gsc-mcp — Google Search Console для SEO-пайплайна: Search Analytics (gsc_query),
  * URL Inspection (gsc_inspect_url), сайтмапы (gsc_list_sitemaps/gsc_get_sitemap).
@@ -10,40 +7,15 @@ import { join } from 'node:path';
  *     доступные Google-аккаунту, добавлять пользователя в каждое свойство не нужно;
  *  2) service account (GSC_SA_JSON) — для headless-кронов; добавляется в каждое
  *     свойство вручную.
+ * Сама механика Google-авторизации (кеш токена, refresh-дедуп, JWT, 401/403,
+ * loopback-приёмник, oauth_start/finish/save_sa_json) — общая, в @seo-tools/shared/google.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  accountParam,
-  CONFIG_DIR,
-  envKey,
-  envOr,
-  fetchJson,
-  getConfig,
-  HttpError,
-  hasRealEnvOverride,
-  jsonResult,
-  loadSharedEnv,
-  maskSecret,
-  registerAuthTools,
-  safeHandler,
-  saveEnvValues,
-  validateAccount,
-} from '@seo-tools/shared';
-import { JWT } from 'google-auth-library';
+import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, safeHandler } from '@seo-tools/shared';
+import { createGoogleAuth, registerGoogleOauthTools } from '@seo-tools/shared/google';
 import { z } from 'zod';
-import {
-  buildQueryBody,
-  forbidden403Hint,
-  type GscRow,
-  isInvalidGrant,
-  mapKeysToDimensions,
-  resolveSite,
-  saJsonFileName,
-  saKeyErrorText,
-  validateDates,
-} from './logic.js';
-import { createLoopbackManager, type OauthFlow } from './loopback.js';
+import { buildQueryBody, forbidden403Hint, type GscRow, mapKeysToDimensions, resolveSite, validateDates } from './logic.js';
 import { collectRows, type TruncatedBy } from './paginate.js';
 
 loadSharedEnv();
@@ -54,152 +26,23 @@ const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const OAUTH_PORT = Number(process.env.GSC_OAUTH_PORT || 8585); // реальный env процесса — ок
 const REDIRECT_URI = `http://localhost:${OAUTH_PORT}`;
 
-// кеши авторизации: ключ = имя аккаунта-профиля ('' = основной)
-const jwtClients = new Map<string, { keyFile: string; client: JWT }>();
-const cachedAccess = new Map<string, { token: string; exp: number }>();
-// in-flight refresh-промисы по аккаунтам: параллельные вызовы делят ОДИН обмен
-// refresh→access (по эталону shared/yandex-oauth.ts), не плодя запросы к Google
-const refreshInflight = new Map<string, Promise<string>>();
-
-function resetAuthCaches(): void {
-  jwtClients.clear();
-  cachedAccess.clear();
-}
-
-/** OAuth-клиент общий для всех профилей: суффикс → основной; понятная ошибка если нет. */
-function googleClientCreds(account?: string): { clientId: string; clientSecret: string } {
-  const clientId = envOr('GOOGLE_CLIENT_ID', account);
-  const clientSecret = envOr('GOOGLE_CLIENT_SECRET', account);
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      'Нет GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET — создай OAuth client (Desktop app) в console.cloud.google.com и передай в gsc_oauth_start.',
-    );
-  }
-  return { clientId, clientSecret };
-}
-
-/** Обмен refresh→access у Google; кладёт результат в cachedAccess. */
-async function refreshAccessToken(account: string | undefined, refreshToken: string, cacheKey: string): Promise<string> {
-  const { clientId, clientSecret } = googleClientCreds(account);
-  const data = await fetchJson<{ access_token: string; expires_in?: number }>('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }).toString(),
-  }).catch((err) => {
-    if (isInvalidGrant(err)) {
-      throw new Error(
-        'Google отверг refresh-токен (invalid_grant) — токен отозван или истёк (Testing-режим = 7 дней). Переавторизуйся: gsc_oauth_start → gsc_oauth_finish.',
-      );
-    }
-    throw err;
-  });
-  cachedAccess.set(cacheKey, { token: data.access_token, exp: Date.now() + (data.expires_in ?? 3600) * 1000 });
-  return data.access_token;
-}
-
-async function getAccessToken(account?: string): Promise<{ token: string; via: 'oauth' | 'sa' }> {
-  const cacheKey = account ?? '';
-  // Путь 1: OAuth пользователя (приоритетный — видит все свойства аккаунта)
-  const refreshToken = getConfig('GSC_REFRESH_TOKEN', account);
-  if (refreshToken) {
-    const hit = cachedAccess.get(cacheKey);
-    if (hit && Date.now() < hit.exp - 60_000) return { token: hit.token, via: 'oauth' };
-    // дедуп параллельных refresh: ждём общий промис, а не делаем второй обмен
-    const inflight = refreshInflight.get(cacheKey);
-    if (inflight) return { token: await inflight, via: 'oauth' };
-    const p = refreshAccessToken(account, refreshToken, cacheKey).finally(() => {
-      if (refreshInflight.get(cacheKey) === p) refreshInflight.delete(cacheKey);
-    });
-    refreshInflight.set(cacheKey, p);
-    return { token: await p, via: 'oauth' };
-  }
-
-  // Путь 2: сервис-аккаунт
-  const keyFile = getConfig('GSC_SA_JSON', account);
-  if (!keyFile) {
-    throw new Error(
-      `Нет авторизации GSC${account ? ` для аккаунта «${account}»` : ''}. ` +
-        `Либо OAuth: gsc_oauth_start${account ? ` (account="${account}")` : ''} → ссылка → gsc_oauth_finish (токен видит все свойства аккаунта), ` +
-        'либо сервис-аккаунт: gsc_save_sa_json / gsc_set_credentials (GSC_SA_JSON) + добавить его email в каждое свойство. ' +
-        'Текущий статус ключей и инструкция — gsc_auth_status.',
-    );
-  }
-  const cached = jwtClients.get(cacheKey);
-  let client = cached?.keyFile === keyFile ? cached.client : undefined;
-  if (!client) {
-    try {
-      client = new JWT({ keyFile, scopes: [SCOPE] });
-    } catch (err) {
-      throw new Error(saKeyErrorText(keyFile, err));
-    }
-    jwtClients.set(cacheKey, { keyFile, client });
-  }
-  const { token } = await client.getAccessToken().catch((err: unknown) => {
-    jwtClients.delete(cacheKey); // следующий вызов пересоздаст клиент (например, после починки файла)
-    throw new Error(saKeyErrorText(keyFile, err)); // google-auth-library читает keyFile лениво — ENOENT всплывает здесь
-  });
-  if (!token) throw new Error('Не удалось получить access token по сервис-аккаунту (GSC_SA_JSON)');
-  return { token, via: 'sa' };
-}
-
-// ── Loopback-приёмник кода OAuth: ловит редирект Google на localhost ──
-// Код привязан к конкретному flow (state + профиль) — чужой/устаревший код не подхватится.
-// Менеджер (с перевзводом таймера авто-закрытия при переиспользовании listener) — в loopback.ts.
-let pendingFlow: OauthFlow | null = null;
-const { start: startLoopback, stop: stopLoopback } = createLoopbackManager({
-  port: OAUTH_PORT,
-  redirectUri: REDIRECT_URI,
-  getFlow: () => pendingFlow,
+// Авторизация Google — общая фабрика (кеш токена по профилю, дедуп refresh, JWT для
+// сервис-аккаунта, 401-ретрай только для OAuth, 403 → доменная подсказка).
+const auth = createGoogleAuth({
+  toolPrefix: 'gsc',
+  scope: SCOPE,
+  refreshEnv: 'GSC_REFRESH_TOKEN',
+  saJsonEnv: 'GSC_SA_JSON',
+  apiName: 'Search Console API',
+  noAuthHint: (account) =>
+    `Нет авторизации GSC${account ? ` для аккаунта «${account}»` : ''}. ` +
+    `Либо OAuth: gsc_oauth_start${account ? ` (account="${account}")` : ''} → ссылка → gsc_oauth_finish (токен видит все свойства аккаунта), ` +
+    'либо сервис-аккаунт: gsc_save_sa_json / gsc_set_credentials (GSC_SA_JSON) + добавить его email в каждое свойство. ' +
+    'Текущий статус ключей и инструкция — gsc_auth_status.',
+  forbiddenHint: forbidden403Hint,
 });
-
-/**
- * fetch к Google API с авторизацией.
- * 401: повтор со свежим токеном — только для OAuth-пути (у сервис-аккаунта JWT кеширует
- * токен сам, повтор с тем же ключом бессмысленен → сразу понятная ошибка).
- * 403: классифицируется как «нет доступа к свойству» с подсказкой.
- */
-async function gscFetch<T>(
-  url: string,
-  init: { method?: 'GET' | 'POST'; body?: string; attempts?: number },
-  account?: string,
-  siteContext?: string,
-): Promise<T> {
-  const { attempts, ...rest } = init;
-  let via: 'oauth' | 'sa' | null = null; // какой путь авторизации сработал в exec (null — токен не получен)
-  const exec = async () => {
-    const auth = await getAccessToken(account);
-    via = auth.via;
-    return fetchJson<T>(url, {
-      ...rest,
-      headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
-      timeoutMs: 120_000, // ceiling для «жирных» страниц (25k строк не влезают в 60с); быстрым вызовам безвреден
-      ...(attempts !== undefined ? { attempts } : {}), // ретраи ограничиваем только там, где нужно (пагинация)
-    });
-  };
-  try {
-    return await exec();
-  } catch (err) {
-    if (err instanceof HttpError && err.status === 401) {
-      if (via === 'sa') {
-        throw new Error(
-          'Google отклонил токен сервис-аккаунта (401) — ключ отозван или Search Console API не включён в проекте. ' +
-            'Проверь: gsc_auth_status; обновить ключ — gsc_save_sa_json.',
-        );
-      }
-      cachedAccess.delete(account ?? ''); // токен отозван раньше expires_in — берём свежий
-      return exec();
-    }
-    if (err instanceof HttpError && err.status === 403) {
-      throw new Error(forbidden403Hint(siteContext));
-    }
-    throw err;
-  }
-}
+const resetAuthCaches = auth.resetCaches;
+const gscFetch = auth.googleFetch;
 
 interface QueryAllResult {
   rows: GscRow[];
@@ -235,7 +78,7 @@ async function queryAll(siteUrl: string, body: Record<string, unknown>, limit: n
   return { rows, truncated, truncatedBy, firstIncompleteDate };
 }
 
-const server = new McpServer({ name: 'gsc', version: '1.5.1' });
+const server = new McpServer({ name: 'gsc', version: '1.6.0' });
 
 registerAuthTools(
   server,
@@ -261,172 +104,22 @@ registerAuthTools(
   },
 );
 
-server.registerTool(
-  'gsc_oauth_start',
-  {
-    description:
-      'Шаг 1 OAuth-авторизации Google: вернёт ссылку — пользователь открывает её под аккаунтом, у которого есть доступ к нужным свойствам GSC, ' +
-      'и разрешает read-only доступ. Токен будет видеть ВСЕ свойства аккаунта (добавлять пользователя в каждое свойство не нужно). ' +
-      'Требуется OAuth client типа Desktop app (client ID + secret из console.cloud.google.com); переданные clientId/clientSecret сохраняются ' +
-      '(при account — в профиль GOOGLE_CLIENT_*__<account>, базовые значения не перезаписываются). ' +
-      'После согласия Google отправит браузер на localhost — код подхватится автоматически, затем вызвать gsc_oauth_finish.',
-    inputSchema: {
-      clientId: z.string().optional().describe('OAuth client ID (если не сохранён как GOOGLE_CLIENT_ID)'),
-      clientSecret: z.string().optional().describe('OAuth client secret'),
-      account: accountParam,
-    },
-  },
-  safeHandler(async (args) => {
-    const values: Record<string, string> = {};
-    if (args.clientId) values[envKey('GOOGLE_CLIENT_ID', args.account)] = args.clientId.trim();
-    if (args.clientSecret) values[envKey('GOOGLE_CLIENT_SECRET', args.account)] = args.clientSecret.trim();
-    if (Object.keys(values).length) saveEnvValues(values);
-    const clientId = envOr('GOOGLE_CLIENT_ID', args.account);
-    if (!clientId || !envOr('GOOGLE_CLIENT_SECRET', args.account)) {
-      return jsonResult({
-        ready: false,
-        action:
-          'Сначала создай OAuth client в console.cloud.google.com (APIs & Services → Credentials → OAuth client ID → Desktop app; ' +
-          'перед этим включить Google Search Console API и настроить OAuth consent screen) и передай clientId + clientSecret в этот инструмент.',
-      });
-    }
-    // новый flow: свежий state, прежний пойманный код (если был) сбрасывается
-    pendingFlow = { account: args.account ?? null, state: randomUUID(), code: null };
-    const listenerOk = await startLoopback();
-    const qs = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: REDIRECT_URI,
-      response_type: 'code',
-      scope: SCOPE,
-      access_type: 'offline', // нужен refresh-токен
-      prompt: 'consent',
-      state: pendingFlow.state, // привязка кода к этому flow/профилю
-    });
-    return jsonResult({
-      ready: true,
-      account: args.account ?? null,
-      authorizeUrl: `https://accounts.google.com/o/oauth2/v2/auth?${qs}`,
-      next: listenerOk
-        ? 'Пользователь открывает ссылку' +
-          (args.account ? ` под Google-аккаунтом профиля «${args.account}»` : '') +
-          ', разрешает доступ — браузер редиректнется на localhost и код будет подхвачен. Затем вызвать gsc_oauth_finish' +
-          (args.account ? ` с account="${args.account}"` : ' без аргументов') +
-          '.'
-        : `Порт ${OAUTH_PORT} занят (другой процесс?): после согласия скопировать параметр code из адресной строки (localhost:${OAUTH_PORT}/?code=...) и передать в gsc_oauth_finish. Либо задать другой порт через GSC_OAUTH_PORT.`,
-      ...(Object.keys(values).length
-        ? {
-            credentialsSaved: Object.keys(values),
-            note: args.account
-              ? `clientId/clientSecret сохранены как ${Object.keys(values).join(', ')} (профиль «${args.account}») — базовые GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET не перезаписаны.`
-              : 'clientId/clientSecret сохранены в базовые GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.',
-          }
-        : {}),
-    });
-  }),
-);
-
-server.registerTool(
-  'gsc_oauth_finish',
-  {
-    description:
-      'Шаг 2 OAuth-авторизации Google: обменивает код на access+refresh токены и сохраняет их. ' +
-      'Без аргументов берёт код, пойманный localhost-приёмником после gsc_oauth_start; можно передать код вручную.',
-    inputSchema: {
-      code: z.string().optional().describe('Код из редиректа (обычно не нужен — подхватывается автоматически)'),
-      account: accountParam,
-    },
-  },
-  safeHandler(async (args) => {
-    const account = args.account ?? null;
-    // защита от подмены профиля: пойманный код принадлежит flow конкретного account
-    if (pendingFlow && account !== pendingFlow.account) {
-      throw new Error(
-        `Текущая авторизация запущена для профиля «${pendingFlow.account ?? 'основной'}», а finish вызван с «${account ?? 'основной'}». ` +
-          'Заверши тот flow или повтори gsc_oauth_start с нужным account.',
-      );
-    }
-    const code = args.code?.trim() || pendingFlow?.code;
-    if (!code) {
-      throw new Error('Код не получен: сначала gsc_oauth_start и авторизация в браузере (или передай code вручную).');
-    }
-    const { clientId, clientSecret } = googleClientCreds(args.account);
-    const data = await fetchJson<{ access_token: string; refresh_token?: string; expires_in?: number }>(
-      'https://oauth2.googleapis.com/token',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code,
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: REDIRECT_URI,
-        }).toString(),
-      },
-    );
-    stopLoopback();
-    pendingFlow = null;
-    if (!data.refresh_token) {
-      throw new Error('Google не вернул refresh_token (повтори gsc_oauth_start — там стоит prompt=consent — и согласись заново).');
-    }
-    const refreshEnvKey = envKey('GSC_REFRESH_TOKEN', args.account);
-    saveEnvValues({ [refreshEnvKey]: data.refresh_token });
-    resetAuthCaches();
-    return jsonResult({
-      ok: true,
-      account,
-      refreshToken: maskSecret(data.refresh_token),
-      note: 'Токен видит все свойства аккаунта. Если OAuth-приложение в статусе Testing — refresh живёт 7 дней (Publish app в consent screen решает). Проверка — gsc_list_sites.',
-      ...(hasRealEnvOverride('GSC_REFRESH_TOKEN', args.account)
-        ? {
-            warning: `Ключ ${refreshEnvKey} перекрыт реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.`,
-          }
-        : {}),
-    });
-  }),
-);
-
-server.registerTool(
-  'gsc_save_sa_json',
-  {
-    description:
-      'Сохранить содержимое JSON-ключа сервис-аккаунта в конфиг-директорию (права 600) и прописать GSC_SA_JSON. ' +
-      'Альтернатива, если файл уже лежит на диске: gsc_set_credentials с путём в GSC_SA_JSON.',
-    inputSchema: {
-      json: z.string().describe('Полное содержимое скачанного JSON-ключа сервис-аккаунта'),
-      account: accountParam,
-    },
-  },
-  safeHandler(async (args) => {
-    const account = validateAccount(args.account); // ПЕРВОЙ строкой: '../../tmp/x' — path traversal, отклоняем ДО любой записи файла
-    let parsed: { client_email?: string; private_key?: string };
-    try {
-      parsed = JSON.parse(args.json);
-    } catch {
-      throw new Error('Невалидный JSON — передай содержимое файла ключа сервис-аккаунта целиком');
-    }
-    if (!parsed.client_email || !parsed.private_key) {
-      throw new Error('JSON не похож на ключ сервис-аккаунта (нет client_email/private_key)');
-    }
-    const file = join(CONFIG_DIR, saJsonFileName(account));
-    writeFileSync(file, args.json, { mode: 0o600 });
-    chmodSync(file, 0o600);
-    const saEnvKey = envKey('GSC_SA_JSON', account);
-    saveEnvValues({ [saEnvKey]: file });
-    resetAuthCaches();
-    return jsonResult({
-      ok: true,
-      savedTo: file,
-      serviceAccountEmail: parsed.client_email,
-      next: 'Добавь этот email в GSC → Настройки → Пользователи и права (права «Полный»), затем проверь gsc_list_sites.',
-      ...(hasRealEnvOverride('GSC_SA_JSON', account)
-        ? {
-            warning: `Ключ ${saEnvKey} перекрыт реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.`,
-          }
-        : {}),
-    });
-  }),
-);
+// OAuth-инструменты (gsc_oauth_start / gsc_oauth_finish / gsc_save_sa_json) — общие,
+// из @seo-tools/shared/google: механика flow одинакова у всех Google-серверов,
+// различаются только scope, env-ключи и доменные тексты.
+registerGoogleOauthTools(server, {
+  prefix: 'gsc',
+  scope: SCOPE,
+  refreshEnv: 'GSC_REFRESH_TOKEN',
+  saJsonEnv: 'GSC_SA_JSON',
+  port: OAUTH_PORT,
+  portEnv: 'GSC_OAUTH_PORT',
+  auth,
+  accessSummary: 'доступ ко ВСЕМ свойствам GSC этого Google-аккаунта (добавлять пользователя в каждое свойство не нужно)',
+  apiName: 'Google Search Console API',
+  checkTool: 'gsc_list_sites',
+  saNextHint: 'Добавь этот email в GSC → Настройки → Пользователи и права (права «Полный»), затем проверь gsc_list_sites.',
+});
 
 server.registerTool(
   'gsc_query',

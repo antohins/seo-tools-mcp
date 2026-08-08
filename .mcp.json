@@ -8,6 +8,10 @@
       "command": "npx",
       "args": ["-y", "seo-tools-mcp-xmlriver"]
     },
+    "aparser": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-aparser"]
+    },
     "wordstat": {
       "command": "npx",
       "args": ["-y", "seo-tools-mcp-wordstat"]
@@ -15,6 +19,10 @@
     "gsc": {
       "command": "npx",
       "args": ["-y", "seo-tools-mcp-gsc"]
+    },
+    "ga4": {
+      "command": "npx",
+      "args": ["-y", "seo-tools-mcp-ga4"]
     },
     "ywm": {
       "command": "npx",

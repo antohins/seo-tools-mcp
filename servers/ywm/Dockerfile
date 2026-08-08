@@ -13,6 +13,7 @@ COPY servers/xmlriver/package.json servers/xmlriver/package.json
 COPY servers/aparser/package.json servers/aparser/package.json
 COPY servers/wordstat/package.json servers/wordstat/package.json
 COPY servers/gsc/package.json servers/gsc/package.json
+COPY servers/ga4/package.json servers/ga4/package.json
 COPY servers/ywm/package.json servers/ywm/package.json
 COPY servers/metrika/package.json servers/metrika/package.json
 # Install only this server and its workspace deps (not the whole monorepo).

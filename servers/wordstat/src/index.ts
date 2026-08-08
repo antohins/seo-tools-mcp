@@ -45,7 +45,7 @@ interface TopResponse {
   associations?: Array<{ phrase: string; count: string }>;
 }
 
-const server = new McpServer({ name: 'wordstat', version: '1.5.1' });
+const server = new McpServer({ name: 'wordstat', version: '1.6.0' });
 
 registerAuthTools(
   server,

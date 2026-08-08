@@ -1,6 +1,6 @@
 /** Чистая логика gsc-сервера — вынесена из index.ts для юнит-тестов (без сети и поднятия сервера). */
 
-import { getConfig, HttpError, validateAccount } from '@seo-tools/shared';
+import { getConfig } from '@seo-tools/shared';
 
 /** Строка ответа Search Analytics API. */
 export interface GscRow {
@@ -32,19 +32,8 @@ export function validateDates(startDate: string, endDate: string): void {
   }
 }
 
-/** true — Google отверг refresh-токен (invalid_grant): токен отозван или истёк, нужна переавторизация. */
-export function isInvalidGrant(err: unknown): boolean {
-  return err instanceof HttpError && err.bodySnippet.includes('invalid_grant');
-}
-
-/**
- * Имя файла SA-ключа внутри CONFIG_DIR. account валидируется ДО склейки пути:
- * '../../tmp/x' отклоняется здесь (path traversal), а не позже в saveEnvValues.
- */
-export function saJsonFileName(account?: string): string {
-  const acc = validateAccount(account);
-  return acc ? `gsc-sa__${acc}.json` : 'gsc-sa.json';
-}
+// isInvalidGrant / saJsonFileName / saKeyErrorText — общие для Google-серверов,
+// живут в @seo-tools/shared/google (auth.ts) и покрыты tests/google-auth.test.ts.
 
 /** Подсказка при 403 от Google API: почти всегда это «нет доступа к свойству» или не тот формат siteUrl. */
 export function forbidden403Hint(siteUrl?: string): string {
@@ -53,14 +42,6 @@ export function forbidden403Hint(siteUrl?: string): string {
     'Проверь список доступных свойств: gsc_list_sites; уровень доступа — gsc_get_site. ' +
     'Форматы siteUrl: sc-domain:example.com или URL-prefix с завершающим «/» (https://example.com/). ' +
     'Для сервис-аккаунта: его email добавлен в свойство (Настройки → Пользователи и права)?'
-  );
-}
-
-/** Текст ошибки чтения/использования JSON-ключа сервис-аккаунта (битый путь, битый ключ) с адресацией на починку. */
-export function saKeyErrorText(keyFile: string, err: unknown): string {
-  return (
-    `Не удалось получить токен по ключу сервис-аккаунта (${keyFile}): ${err instanceof Error ? err.message : String(err)}. ` +
-    'Проверь путь GSC_SA_JSON (gsc_auth_status); обновить ключ — gsc_save_sa_json / gsc_set_credentials.'
   );
 }
 

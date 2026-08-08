@@ -1,14 +1,14 @@
 {
-  "name": "seo-tools-mcp-xmlriver",
-  "mcpName": "io.github.antohins/seo-tools-mcp-xmlriver",
+  "name": "seo-tools-mcp-ga4",
+  "mcpName": "io.github.antohins/seo-tools-mcp-ga4",
   "version": "1.6.0",
-  "description": "MCP server for Google & Yandex SERP, image/news verticals and URL indexation checks via XMLRiver",
+  "description": "MCP server for Google Analytics 4: reports, traffic sources, landing pages, events and realtime (read-only)",
   "license": "MIT",
   "author": "antohins",
   "repository": {
     "type": "git",
     "url": "https://github.com/antohins/seo-tools-mcp.git",
-    "directory": "servers/xmlriver"
+    "directory": "servers/ga4"
   },
   "homepage": "https://github.com/antohins/seo-tools-mcp#readme",
   "bugs": "https://github.com/antohins/seo-tools-mcp/issues",
@@ -17,16 +17,14 @@
     "model-context-protocol",
     "claude",
     "seo",
-    "serp",
-    "xmlriver",
-    "google",
-    "yandex",
-    "rank-tracking",
-    "indexation"
+    "analytics",
+    "google-analytics",
+    "ga4",
+    "web-analytics"
   ],
   "type": "module",
   "bin": {
-    "seo-tools-mcp-xmlriver": "dist/index.js"
+    "seo-tools-mcp-ga4": "dist/index.js"
   },
   "files": [
     "dist"
@@ -44,7 +42,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^3.24.0",
-    "fast-xml-parser": "^4.5.0"
+    "google-auth-library": "^9.15.0"
   },
   "devDependencies": {
     "@seo-tools/shared": "workspace:*",

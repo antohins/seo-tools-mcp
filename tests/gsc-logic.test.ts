@@ -73,35 +73,6 @@ describe('validateDates', () => {
   });
 });
 
-describe('saJsonFileName (path traversal)', () => {
-  it('без account → gsc-sa.json', () => {
-    expect(logic.saJsonFileName()).toBe('gsc-sa.json');
-  });
-
-  it('валидный account → gsc-sa__<account>.json', () => {
-    expect(logic.saJsonFileName('client1')).toBe('gsc-sa__client1.json');
-  });
-
-  it('account="../../tmp/x" → ошибка валидации, имя файла не строится', () => {
-    expect(() => logic.saJsonFileName('../../tmp/x')).toThrow(/Недопустимое имя аккаунта/);
-    expect(() => logic.saJsonFileName('../x')).toThrow(/Недопустимое имя аккаунта/);
-    expect(() => logic.saJsonFileName('a/b')).toThrow(/Недопустимое имя аккаунта/);
-  });
-});
-
-describe('isInvalidGrant', () => {
-  it('HttpError с invalid_grant в теле → true', () => {
-    const err = new sharedDist.HttpError(400, 'https://oauth2.googleapis.com/token', '{"error":"invalid_grant"}');
-    expect(logic.isInvalidGrant(err)).toBe(true);
-  });
-
-  it('HttpError без invalid_grant и прочие ошибки → false', () => {
-    expect(logic.isInvalidGrant(new sharedDist.HttpError(500, 'https://oauth2.googleapis.com/token', 'server error'))).toBe(false);
-    expect(logic.isInvalidGrant(new Error('invalid_grant'))).toBe(false); // классификация только по HttpError
-    expect(logic.isInvalidGrant('invalid_grant')).toBe(false);
-  });
-});
-
 describe('forbidden403Hint', () => {
   it('содержит свойство, адресацию на list_sites/get_site и оба формата siteUrl', () => {
     const hint = logic.forbidden403Hint('sc-domain:example.com');
@@ -241,15 +212,5 @@ describe('buildQueryBody', () => {
         ],
       },
     ]);
-  });
-});
-
-describe('saKeyErrorText', () => {
-  it('содержит путь, исходную ошибку и адресацию на починку', () => {
-    const text = logic.saKeyErrorText('/cfg/gsc-sa.json', new Error('ENOENT: no such file'));
-    expect(text).toContain('/cfg/gsc-sa.json');
-    expect(text).toContain('ENOENT');
-    expect(text).toContain('gsc_auth_status');
-    expect(text).toContain('gsc_save_sa_json');
   });
 });

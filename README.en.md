@@ -9,7 +9,7 @@
 
 [Русский](README.md) | **English**
 
-Seven **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Yandex.Webmaster, Yandex.Metrica and self-hosted A-Parser straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, Webmaster host, Metrica counter) are configured on the fly.
+Eight **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Google Analytics 4, Yandex.Webmaster, Yandex.Metrica and self-hosted A-Parser straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, GA4 property, Webmaster host, Metrica counter) are configured on the fly.
 
 > 🛰 We use these servers in production at **[PBN Workers](https://pbn-workers.com/tools/seo-tools-mcp/)** — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. Need steady organic traffic? [Get in touch](https://pbn-workers.com/tools/seo-tools-mcp/).
 
@@ -19,6 +19,7 @@ Seven **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, G
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
+| `ga4` | `ga4_list_properties`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (auto-refresh) |
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (API URL + password) |
@@ -67,6 +68,19 @@ Every server additionally exposes auth tools `<server>_auth_status` and `<server
 - `gsc_get_sitemap` — details for one sitemap
 
 Search Analytics dates are in Pacific Time (not MSK); history is ~16 months; final data lags by ~2-3 days (fresh data via `dataState=all`); `ctr` in the response is a 0..1 fraction.
+
+### ga4 — Google Analytics 4
+- `ga4_list_properties` — GA4 properties available to the authorization (this is where `propertyId` comes from — it is **not** the `G-XXXXXXX` Measurement ID)
+- `ga4_report` — arbitrary report: any dimensions × metrics, dimension filters, sorting (full Data API `runReport`)
+- `ga4_bytime` — metrics over time (date/hour/week/month)
+- `ga4_traffic_sources` — channel group, source/medium, campaign; `organicOnly` for organic search only
+- `ga4_geo` — country/region/city
+- `ga4_devices` — device category/OS/browser
+- `ga4_top_pages` — top pages by `pagePath`, landing page or title; `organicOnly` and `pathContains` filters
+- `ga4_events` — events by `eventName`; `keyEventsOnly` for key events (former conversions)
+- `ga4_realtime` — realtime report (last 30 minutes)
+
+Units and dates: GA4 returns `bounceRate`/`engagementRate` as a **0..1 fraction**, not a percent; dates resolve in the **property's** timezone — pass `YYYY-MM-DD` or GA4 keywords (`today`, `yesterday`, `28daysAgo`), and the applied timezone comes back in the response. Responses carry `totalRows`/`truncated`, and `thresholded: true` means part of the data is hidden behind GA4's privacy threshold.
 
 ### ywm — Yandex.Webmaster
 - `ywm_hosts` — user id + verified sites
@@ -121,6 +135,7 @@ claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
 claude mcp add xmlriver --scope user -- npx -y seo-tools-mcp-xmlriver
 claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
 claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
+claude mcp add ga4      --scope user -- npx -y seo-tools-mcp-ga4
 claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
 claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 claude mcp add aparser  --scope user -- npx -y seo-tools-mcp-aparser
@@ -136,6 +151,7 @@ The servers are **independent**: take a single package and ignore the rest. Each
 | [`seo-tools-mcp-xmlriver`](https://www.npmjs.com/package/seo-tools-mcp-xmlriver) | Google/Yandex SERP + indexation check |
 | [`seo-tools-mcp-wordstat`](https://www.npmjs.com/package/seo-tools-mcp-wordstat) | Yandex keyword frequencies (Yandex Cloud) |
 | [`seo-tools-mcp-gsc`](https://www.npmjs.com/package/seo-tools-mcp-gsc) | Google Search Console |
+| [`seo-tools-mcp-ga4`](https://www.npmjs.com/package/seo-tools-mcp-ga4) | Google Analytics 4 |
 | [`seo-tools-mcp-ywm`](https://www.npmjs.com/package/seo-tools-mcp-ywm) | Yandex.Webmaster |
 | [`seo-tools-mcp-metrika`](https://www.npmjs.com/package/seo-tools-mcp-metrika) | Yandex.Metrica |
 | [`seo-tools-mcp-aparser`](https://www.npmjs.com/package/seo-tools-mcp-aparser) | bridge to a self-hosted A-Parser |
@@ -170,7 +186,7 @@ In any MCP client (Claude Desktop, Cursor…) it's a single block in `mcpServers
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
 ROOT=$(pwd)
-for s in xmlstock xmlriver wordstat gsc ywm metrika aparser; do
+for s in xmlstock xmlriver wordstat gsc ga4 ywm metrika aparser; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```
@@ -221,6 +237,7 @@ ROOT=/path/to/seo-tools-mcp
 claude mcp add xmlstock --scope user -- node $ROOT/servers/xmlstock/dist/index.js
 claude mcp add wordstat --scope user -- node $ROOT/servers/wordstat/dist/index.js
 claude mcp add gsc      --scope user -- node $ROOT/servers/gsc/dist/index.js
+claude mcp add ga4      --scope user -- node $ROOT/servers/ga4/dist/index.js
 claude mcp add ywm      --scope user -- node $ROOT/servers/ywm/dist/index.js
 claude mcp add metrika  --scope user -- node $ROOT/servers/metrika/dist/index.js
 ```
@@ -271,6 +288,17 @@ Two paths; **recommended — OAuth**: the token inherits your Google account's a
 **Path B — service account (for headless crons):** IAM → Service Accounts → JSON key → `gsc_save_sa_json` (or path in `GSC_SA_JSON`) → add the account's email to **each** needed GSC property (Settings → Users and permissions, "Full").
 
 If both are set — OAuth wins.
+
+### Google Analytics 4
+
+Same two paths as GSC, and the **OAuth app is shared** (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are reused). GA4 has its own scope, so it needs its own one-time authorization.
+
+1. In the same Cloud project → APIs & Services → Library → enable **Google Analytics Data API** and **Google Analytics Admin API**.
+2. In chat: `ga4_oauth_start` (no arguments needed if the client ID/secret are already saved for GSC) → open the link → grant access → the browser redirects to `localhost:8586` (a different port from GSC so both servers can run at once), the code is picked up automatically → `ga4_oauth_finish`.
+3. Check: `ga4_list_properties` — shows all account properties and their `propertyId`.
+4. Handy: save a default property via `ga4_set_credentials` → `GA4_PROPERTY_ID` (the numeric id from step 3), otherwise pass `propertyId` on every call.
+
+**Path B — service account:** JSON key → `ga4_save_sa_json` → add the account's email to the GA4 property (Admin → Property access management, "Viewer").
 
 ### Yandex OAuth (Webmaster + Metrica — one app, one token)
 

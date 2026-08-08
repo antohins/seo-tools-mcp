@@ -9,7 +9,7 @@
 
 **Русский** | [English](README.en.md)
 
-Семь **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Яндекс.Вебмастеру, Яндекс.Метрике и self-hosted A-Parser прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, хост Вебмастера, счётчик Метрики) настраиваются на лету.
+Восемь **универсальных** stdio MCP-серверов для SEO: доступ к SERP, Wordstat, Google Search Console, Google Analytics 4, Яндекс.Вебмастеру, Яндекс.Метрике и self-hosted A-Parser прямо из Claude Code (и любого MCP-клиента). Все инструменты **read-only**, вывод — строгий JSON. К конкретному сайту не привязаны: дефолты (свойство GSC, свойство GA4, хост Вебмастера, счётчик Метрики) настраиваются на лету.
 
 > 🛰 Эти серверы мы используем в продакшене в **[PBN Workers](https://pbn-workers.com/ru/tools/seo-tools-mcp/)** — инфраструктура поискового топа: семантика, PBN и сателлиты, автоматизация SEO. Нужен стабильный органический трафик — [приходите](https://pbn-workers.com/ru/tools/seo-tools-mcp/).
 
@@ -19,6 +19,7 @@
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
+| `ga4` | `ga4_list_properties`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (авто-refresh) |
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (URL + пароль API) |
@@ -65,6 +66,19 @@
 - `gsc_get_sitemap` — детали одного sitemap
 
 Даты Search Analytics — по Pacific Time (не МСК); история ~16 месяцев; финальные данные отстают на ~2-3 дня (свежие — `dataState=all`); `ctr` в ответе — доля 0..1.
+
+### ga4 — Google Analytics 4
+- `ga4_list_properties` — свойства GA4, доступные авторизации (отсюда берётся `propertyId` — это **не** Measurement ID `G-XXXXXXX`)
+- `ga4_report` — произвольный отчёт: любые измерения × метрики, фильтры по измерениям, сортировка (полный Data API `runReport`)
+- `ga4_bytime` — динамика метрик по времени (день/час/неделя/месяц)
+- `ga4_traffic_sources` — источники трафика: группа каналов, source/medium, кампания; `organicOnly` — только органика
+- `ga4_geo` — страна/регион/город
+- `ga4_devices` — тип устройства/ОС/браузер
+- `ga4_top_pages` — топ страниц по `pagePath`, странице входа или заголовку; фильтры `organicOnly` и `pathContains`
+- `ga4_events` — события по `eventName`; `keyEventsOnly` — только ключевые события (бывшие конверсии)
+- `ga4_realtime` — отчёт в реальном времени (последние 30 минут)
+
+Единицы и даты: `bounceRate`/`engagementRate` GA4 отдаёт **долей 0..1** (не процентами); даты считаются в таймзоне **свойства** — принимаются `YYYY-MM-DD` и ключевые слова GA4 (`today`, `yesterday`, `28daysAgo`), фактическая таймзона возвращается в ответе. В ответах есть `totalRows`/`truncated`, а `thresholded: true` означает, что часть данных скрыта порогом конфиденциальности GA4.
 
 ### ywm — Яндекс.Вебмастер
 - `ywm_hosts` — id пользователя + подтверждённые сайты
@@ -119,6 +133,7 @@ claude mcp add xmlstock --scope user -- npx -y seo-tools-mcp-xmlstock
 claude mcp add xmlriver --scope user -- npx -y seo-tools-mcp-xmlriver
 claude mcp add wordstat --scope user -- npx -y seo-tools-mcp-wordstat
 claude mcp add gsc      --scope user -- npx -y seo-tools-mcp-gsc
+claude mcp add ga4      --scope user -- npx -y seo-tools-mcp-ga4
 claude mcp add ywm      --scope user -- npx -y seo-tools-mcp-ywm
 claude mcp add metrika  --scope user -- npx -y seo-tools-mcp-metrika
 claude mcp add aparser  --scope user -- npx -y seo-tools-mcp-aparser
@@ -134,6 +149,7 @@ claude mcp add aparser  --scope user -- npx -y seo-tools-mcp-aparser
 | [`seo-tools-mcp-xmlriver`](https://www.npmjs.com/package/seo-tools-mcp-xmlriver) | SERP Google/Яндекс + проверка индексации |
 | [`seo-tools-mcp-wordstat`](https://www.npmjs.com/package/seo-tools-mcp-wordstat) | частотности Яндекса (Yandex Cloud) |
 | [`seo-tools-mcp-gsc`](https://www.npmjs.com/package/seo-tools-mcp-gsc) | Google Search Console |
+| [`seo-tools-mcp-ga4`](https://www.npmjs.com/package/seo-tools-mcp-ga4) | Google Analytics 4 |
 | [`seo-tools-mcp-ywm`](https://www.npmjs.com/package/seo-tools-mcp-ywm) | Яндекс.Вебмастер |
 | [`seo-tools-mcp-metrika`](https://www.npmjs.com/package/seo-tools-mcp-metrika) | Яндекс.Метрика |
 | [`seo-tools-mcp-aparser`](https://www.npmjs.com/package/seo-tools-mcp-aparser) | мост к self-hosted A-Parser |
@@ -168,7 +184,7 @@ XMLSTOCK_USER=... XMLSTOCK_KEY=... npx -y seo-tools-mcp-xmlstock
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp
 pnpm install && pnpm build
 ROOT=$(pwd)
-for s in xmlstock xmlriver wordstat gsc ywm metrika aparser; do
+for s in xmlstock xmlriver wordstat gsc ga4 ywm metrika aparser; do
   claude mcp add "$s" --scope user -- node "$ROOT/servers/$s/dist/index.js"
 done
 ```
@@ -219,6 +235,7 @@ ROOT=/path/to/seo-tools-mcp
 claude mcp add xmlstock --scope user -- node $ROOT/servers/xmlstock/dist/index.js
 claude mcp add wordstat --scope user -- node $ROOT/servers/wordstat/dist/index.js
 claude mcp add gsc      --scope user -- node $ROOT/servers/gsc/dist/index.js
+claude mcp add ga4      --scope user -- node $ROOT/servers/ga4/dist/index.js
 claude mcp add ywm      --scope user -- node $ROOT/servers/ywm/dist/index.js
 claude mcp add metrika  --scope user -- node $ROOT/servers/metrika/dist/index.js
 ```
@@ -269,6 +286,17 @@ claude mcp add metrika  --scope user -- node $ROOT/servers/metrika/dist/index.js
 **Путь B — сервис-аккаунт (для headless-кронов):** IAM → Service Accounts → JSON-ключ → `gsc_save_sa_json` (или путь в `GSC_SA_JSON`) → добавить email аккаунта в **каждое** нужное свойство GSC (Настройки → Пользователи и права, «Полный»).
 
 Если заданы оба — приоритет у OAuth.
+
+### Google Analytics 4 (приоритет 1)
+
+Авторизация та же, что у GSC, и **OAuth-приложение общее** (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` переиспользуются). Но scope у GA4 свой, поэтому нужна отдельная авторизация — один раз.
+
+1. В том же проекте console.cloud.google.com → APIs & Services → Library → включить **Google Analytics Data API** и **Google Analytics Admin API**.
+2. В чате: `ga4_oauth_start` (если client ID/secret уже сохранены для GSC — без аргументов) → открыть ссылку → разрешить → браузер редиректнется на `localhost:8586` (порт отличается от GSC, чтобы серверы не конфликтовали), код подхватится автоматически → `ga4_oauth_finish`.
+3. Проверка: `ga4_list_properties` — покажет все свойства аккаунта и их `propertyId`.
+4. Удобно сохранить свойство по умолчанию: `ga4_set_credentials` → `GA4_PROPERTY_ID` (числовой id из п. 3), иначе передавать `propertyId` в каждом вызове.
+
+**Путь B — сервис-аккаунт:** JSON-ключ → `ga4_save_sa_json` → добавить email аккаунта в свойство GA4 (Администратор → Управление доступом к ресурсу, роль «Просмотр»).
 
 ### Яндекс OAuth (Вебмастер + Метрика — одно приложение, один токен)
 

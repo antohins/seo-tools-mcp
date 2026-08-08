@@ -88,7 +88,7 @@ const date2Param = z
   .optional()
   .describe('YYYY-MM-DD (по умолчанию сегодня; «сегодня» — по МСК)');
 
-const server = new McpServer({ name: 'metrika', version: '1.5.1' });
+const server = new McpServer({ name: 'metrika', version: '1.6.0' });
 
 registerAuthTools(
   server,

@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-07
+
+### Added
+- **New server `ga4`** — Google Analytics 4 via the Data API v1beta and Admin API (8th server).
+  Tools: `ga4_list_properties` (Admin API `accountSummaries` — where `propertyId` comes from),
+  `ga4_report` (arbitrary dimensions × metrics, dimension filters, sorting), `ga4_bytime`
+  (date/hour/week/month), `ga4_traffic_sources` (channel / source-medium / campaign, `organicOnly`),
+  `ga4_geo`, `ga4_devices`, `ga4_top_pages` (page / landing page / title, `organicOnly`,
+  `pathContains`), `ga4_events` (`keyEventsOnly` for key events) and `ga4_realtime`.
+  Config: `GA4_REFRESH_TOKEN` / `GA4_SA_JSON` / `GA4_PROPERTY_ID`; the OAuth app is **shared with
+  gsc** (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`), GA4 only needs its own consent (different
+  scope) and uses loopback port 8586 so both servers can run at once.
+  Responses carry `totalRows`/`truncated`, the property `timeZone` and `thresholded` (GA4 privacy
+  threshold). Dates accept `YYYY-MM-DD` and GA4 keywords (`today`/`yesterday`/`NdaysAgo`) — they
+  resolve in the property's timezone, so no local "today" is computed. NOTE: GA4 returns
+  `bounceRate`/`engagementRate` as a **0..1 fraction**, not a percent (documented in the tools).
+
+### Changed
+- **shared**: Google authorization extracted from `servers/gsc` into a reusable subpath
+  `@seo-tools/shared/google` (`createGoogleAuth` — token cache per profile, in-flight refresh
+  dedup, service-account JWT, 401 retry for the OAuth path only, 403 → domain hint;
+  `registerGoogleOauthTools` — `<prefix>_oauth_start`/`_oauth_finish`/`_save_sa_json`;
+  `loopback.ts` moved as-is). Like `./serp`, it is a **separate subpath** so that
+  `google-auth-library` stays out of the non-Google server bundles (verified: 0 occurrences in
+  xmlstock/xmlriver/wordstat/ywm/metrika/aparser). `servers/gsc/src/index.ts` shrank 644 → 323
+  lines with no behavior change; `isInvalidGrant`/`saJsonFileName`/`saKeyErrorText` now live in
+  shared and are covered by the new `tests/google-auth.test.ts`.
+- **docs**: `.mcp.json` had been missing `aparser` since 1.4.0 — added, together with `ga4`;
+  both READMEs, `.env.example` and the from-source/registration snippets now cover all 8 servers;
+  the six older Dockerfiles copy `servers/ga4/package.json` (otherwise `--frozen-lockfile` fails).
+
 ## [1.5.1] — 2026-08-07
 
 ### Fixed
@@ -433,7 +464,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.3.0...v1.4.0
