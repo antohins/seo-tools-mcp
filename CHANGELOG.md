@@ -6,6 +6,78 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-08-08
+
+Post-release review of 1.6.0 (two passes) — fixes for the newly published `ga4` server and the
+shared Google module — plus five additions to `ga4`. Several items change behavior that 1.6.0
+already shipped. Everything here was verified against a live GA4 property, which is also where the
+last two defects were caught (the 403 hint discarding Google's own explanation, and a flawed
+first attempt at isolating incompatible fields).
+
+### Added
+- **ga4**: `ga4_metadata` — which dimensions and metrics exist **in this property** (Data API
+  `getMetadata`), custom definitions included (`customEvent:…`). A property exposes hundreds of
+  fields (375 dimensions / 119 metrics on a live account), so the list is searchable, capped and
+  descriptions are opt-in. Each field carries `type` (int vs float — matters for `metricFilters`)
+  and `blockedReasons`: a blocked metric silently returns **zeros** in reports and makes a metric
+  filter fail with 400, which is invisible without this tool.
+- **ga4**: `ga4_check_compatibility` — is a dimension/metric combination valid for this property,
+  without paying for a heavy report. Note the API's actual contract: the call **fails** when the
+  requested combination is incompatible (that verdict is surfaced as `compatible: false` plus the
+  fields GA4 wants removed), and on success it lists what else *can be added*. Filters participate
+  in compatibility, so the same `filters`/`metricFilters` can be passed in. This is the only
+  reliable way to check property-dependent combinations — e.g. the Search Console metrics
+  (`organicGoogleSearchClicks` and friends) exist in metadata but pair with **nothing** unless the
+  property is linked to Search Console.
+- **ga4**: period comparison in every report tool — `compareStartDate`/`compareEndDate` add a second
+  date range, and rows gain a `dateRange` column valued `current`/`previous`. Because GA4's `limit`
+  applies to the whole response rather than per period, a truncated comparison now returns an
+  explicit note to raise the limit.
+- **ga4**: `metricFilters` in `ga4_report` — filter by metric **values** (`sessions > 50`), several
+  conditions ANDed; integers are sent as `int64Value`, fractions as `doubleValue`.
+- **ga4**: `includeTotals` in every report tool — metric totals in a `totals` field (one row per
+  period when comparing; the period label is preserved while GA4's `RESERVED_*` placeholders are dropped).
+
+### Fixed
+- **ga4** (wrong data, silent): `ga4_events(keyEventsOnly: true)` returned **all** events — the flag
+  only added the `keyEvents` metric and applied no filter at all. Now it filters on the `isKeyEvent`
+  dimension (renamed from `isConversionEvent` in the 2024-05-06 API changelog); an empty result also
+  carries a `note` explaining that key events may simply not be marked up in GA4.
+- **ga4**: `ga4_top_pages(groupBy: "landing")` used the deprecated `landingPage`, which since
+  2023-05-14 returns the path **without** the query string — figures diverged from the GA4 UI.
+  Switched to `landingPagePlusQueryString`.
+- **ga4**: `pathContains` now filters on the grouping dimension (and on `pagePath` only for
+  `groupBy: "title"`). Filtering landing pages by the event-scoped `pagePath` answered a different
+  question — "landing pages of sessions that viewed /blog" instead of "landing pages under /blog".
+- **ga4**: `orderBy` outside the requested `metrics`/`dimensions` now fails locally with a clear
+  message instead of being sent as a dimension and coming back as an opaque API 400 (the Data API
+  requires the sort field to be present in the request).
+- **ga4**: `ga4_realtime` no longer reports `timeZone`/`currency`/`thresholded` — `runRealtimeReport`
+  has no `metadata` block at all, so those were always null placeholders. The fields are now absent
+  rather than fake (`rowCount` **is** present there, so `truncated` still works).
+- **ga4**: `truncated` accounts for `offset` — on the last page of a paginated report it no longer
+  reports a truncation that isn't there (which would make a client loop forever).
+- **ga4**: `ga4_list_properties` walks `nextPageToken` (Admin API caps `pageSize` at 200), bounded by
+  a 20-page guard and a 2-minute deadline, with retries limited so the call can't run for tens of minutes.
+- **shared/google**: the loopback page shown in the browser after consent named `gsc_oauth_finish`
+  even for other servers — GA4 users were sent to the wrong tool (or a nonexistent one). The prefix
+  is now passed per server and is a **required** parameter, so a future Google server cannot silently
+  inherit the wrong name.
+- **shared/google**: `<prefix>_oauth_start` now warns when it replaces the shared
+  `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (which would invalidate refresh tokens of the other Google
+  server), and separately warns when those keys are overridden by the process environment, in which
+  case the passed client would not take effect at all.
+- **shared/google**: HTTP 429 is reported as an exhausted quota with a per-server hint instead of a raw
+  `RESOURCE_EXHAUSTED`; 403/429 arriving from the retry **after** a 401 are now classified too, and a
+  429 from the token-exchange endpoint is no longer misreported as the target API's quota.
+- **gsc**: removed the `REDIRECT_URI` constant left dead by the shared-module refactor; restored the
+  wording of the `*_oauth_start`/`*_oauth_finish` descriptions, which the parameterization had garbled.
+
+### Changed
+- **tests**: new `tests/google-fetch.test.ts` (403/429 classification, retry after 401, token-endpoint
+  429 not mislabeled) plus coverage for the fixed `ga4` paths (orderBy validation, offset-aware
+  `truncated`, realtime without metadata). 469 → 474 tests.
+
 ## [1.6.0] — 2026-08-07
 
 ### Added
@@ -464,7 +536,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.4.0...v1.5.0

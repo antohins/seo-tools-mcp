@@ -27,7 +27,9 @@ GA4 uses Google OAuth — no env needed to start; authorize right in the chat vi
 ## Tools
 
 - `ga4_list_properties` — GA4 properties available to the authorization (this is where you get `propertyId` — it is **not** the `G-XXXXXXX` Measurement ID)
-- `ga4_report` — arbitrary report: any dimensions × metrics, dimension filters, sorting (full Data API `runReport`)
+- `ga4_metadata` — dimensions and metrics available in **this** property, custom definitions included (`customEvent:…`); substring search, plus `blockedReasons` (a blocked metric returns zeros with no error) and `type` (int vs float for `metricFilters`)
+- `ga4_check_compatibility` — whether a dimension/metric combination works in this property, without spending a heavy report; on failure it names the fields GA4 wants removed, and it also lists what else can be added
+- `ga4_report` — arbitrary report: any dimensions × metrics, dimension **and metric** filters, sorting, period comparison and totals (full Data API `runReport`)
 - `ga4_bytime` — metrics over time (date / hour / week / month)
 - `ga4_traffic_sources` — sessions/users by channel group, source-medium, source, medium or campaign; `organicOnly` for SEO
 - `ga4_geo` — country / region / city
@@ -35,6 +37,8 @@ GA4 uses Google OAuth — no env needed to start; authorize right in the chat vi
 - `ga4_top_pages` — top pages by path, landing page or title; `organicOnly` + `pathContains` filters
 - `ga4_events` — event counts by `eventName`; `keyEventsOnly` for key events (former conversions)
 - `ga4_realtime` — realtime report (last 30 minutes)
+
+> **Period comparison and totals.** Every report tool accepts `compareStartDate`/`compareEndDate` (rows then carry a `dateRange` column valued `current`/`previous`) and `includeTotals` (a `totals` field, one row per period when comparing). Note that GA4's `limit` applies to the **whole** response, not per period — when comparing, raise it (roughly double) so both periods get their rows; the response says so explicitly when it matters.
 
 > **Units and dates.** GA4 returns `bounceRate`/`engagementRate` as a **fraction (0..1)**, not a percent. Dates are resolved in the **property's timezone** — pass `YYYY-MM-DD` or GA4 keywords (`today`, `yesterday`, `28daysAgo`); the applied timezone comes back in the response. Responses also carry `totalRows`/`truncated` and `thresholded: true` when GA4 hides part of the data behind its privacy threshold.
 

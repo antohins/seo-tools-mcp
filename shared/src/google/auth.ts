@@ -45,6 +45,8 @@ export interface GoogleAuthConfig {
   noAuthHint: (account?: string) => string;
   /** текст 403 (доменный: нет доступа к свойству/ресурсу) */
   forbiddenHint: (context?: string) => string;
+  /** доменное пояснение к 429 (какие именно квоты у этого API); есть общий дефолт */
+  quotaHint?: string;
 }
 
 export interface GoogleAuth {
@@ -171,9 +173,14 @@ export function createGoogleAuth(cfg: GoogleAuthConfig): GoogleAuth {
   ): Promise<T> => {
     const { attempts, ...rest } = init;
     let via: 'oauth' | 'sa' | null = null; // какой путь авторизации сработал в exec (null — токен не получен)
+    // Ошибка обмена refresh→access (oauth2.googleapis.com/token) НЕ должна диагностироваться
+    // как квота целевого API: у token-эндпоинта свои рейт-лимиты и свои причины.
+    let apiCallStarted = false;
     const exec = async () => {
+      apiCallStarted = false;
       const auth = await getAccessToken(account);
-      via = auth.via;
+      via = auth.via; // фиксируем ДО запроса: нужен именно в обработке ошибки
+      apiCallStarted = true; // дальше идёт запрос именно к API сервера
       return fetchJson<T>(url, {
         ...rest,
         headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
@@ -181,10 +188,46 @@ export function createGoogleAuth(cfg: GoogleAuthConfig): GoogleAuth {
         ...(attempts !== undefined ? { attempts } : {}), // ретраи ограничиваем только там, где нужно (пагинация)
       });
     };
+
+    /**
+     * Сообщение Google из тела ошибки. У 403 оно часто содержит саму причину и ссылку
+     * на исправление («…API has not been used in project N … Enable it by visiting …»),
+     * поэтому терять его нельзя — доменная подсказка ДОПОЛНЯЕТ, а не заменяет его.
+     */
+    const apiMessage = (err: HttpError): string => {
+      try {
+        const m = JSON.parse(err.bodySnippet)?.error?.message;
+        if (typeof m === 'string' && m) return m;
+      } catch {
+        /* тело не JSON — ниже вернём обрезанный сырой текст */
+      }
+      return err.bodySnippet.slice(0, 300);
+    };
+
+    /** Классификация ответа API: 403 — доступ, 429 — квота; остальное как есть. */
+    const classify = (err: unknown): never => {
+      if (err instanceof HttpError && apiCallStarted) {
+        if (err.status === 403) {
+          const original = apiMessage(err);
+          throw new Error(`${cfg.forbiddenHint(context)}${original ? ` Ответ Google: ${original}` : ''}`);
+        }
+        // 429 приходит уже после ретраев fetchJson: у Google это исчерпанная квота
+        // (RESOURCE_EXHAUSTED), а не «повторите сейчас»
+        if (err.status === 429) {
+          throw new Error(
+            `${cfg.apiName}: исчерпана квота запросов (429${context ? `, ресурс ${context}` : ''}). ` +
+              (cfg.quotaHint ??
+                'Квоты считаются на проект и на ресурс и восстанавливаются со временем — снизь частоту/объём запросов и повтори позже.'),
+          );
+        }
+      }
+      throw err;
+    };
+
     try {
       return await exec();
     } catch (err) {
-      if (err instanceof HttpError && err.status === 401) {
+      if (err instanceof HttpError && err.status === 401 && apiCallStarted) {
         if (via === 'sa') {
           throw new Error(
             `Google отклонил токен сервис-аккаунта (401) — ключ отозван или ${cfg.apiName} не включён в проекте. ` +
@@ -192,12 +235,10 @@ export function createGoogleAuth(cfg: GoogleAuthConfig): GoogleAuth {
           );
         }
         cachedAccess.delete(account ?? ''); // токен отозван раньше expires_in — берём свежий
-        return exec();
+        // повтор тоже проходит классификацию: иначе 403/429 из ретрая улетали бы сырыми
+        return await exec().catch(classify);
       }
-      if (err instanceof HttpError && err.status === 403) {
-        throw new Error(cfg.forbiddenHint(context));
-      }
-      throw err;
+      return classify(err);
     }
   };
 

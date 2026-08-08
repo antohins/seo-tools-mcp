@@ -18,6 +18,7 @@ beforeEach(() => {
     redirectUri: 'http://localhost:0',
     getFlow: () => flow,
     autoCloseMs: AUTO_CLOSE_MS,
+    toolPrefix: 'gsc',
   });
 });
 

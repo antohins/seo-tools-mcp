@@ -19,7 +19,7 @@ Eight **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, G
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
-| `ga4` | `ga4_list_properties`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (all account properties) / service account |
+| `ga4` | `ga4_list_properties`, `ga4_metadata`, `ga4_check_compatibility`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (auto-refresh) |
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (API URL + password) |
@@ -71,6 +71,8 @@ Search Analytics dates are in Pacific Time (not MSK); history is ~16 months; fin
 
 ### ga4 — Google Analytics 4
 - `ga4_list_properties` — GA4 properties available to the authorization (this is where `propertyId` comes from — it is **not** the `G-XXXXXXX` Measurement ID)
+- `ga4_metadata` — dimensions and metrics available in THIS property, custom ones included (`customEvent:…`); substring search, `blockedReasons` (such a metric returns zeros) and `type` (int vs float for `metricFilters`)
+- `ga4_check_compatibility` — whether a dimension/metric combination is valid for this property, without running a heavy report; on failure it names the fields to remove
 - `ga4_report` — arbitrary report: any dimensions × metrics, dimension filters, sorting (full Data API `runReport`)
 - `ga4_bytime` — metrics over time (date/hour/week/month)
 - `ga4_traffic_sources` — channel group, source/medium, campaign; `organicOnly` for organic search only

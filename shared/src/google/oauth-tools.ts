@@ -58,14 +58,15 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
     port: opts.port,
     redirectUri,
     getFlow: () => pendingFlow,
+    toolPrefix: prefix, // страница в браузере должна звать инструмент ЭТОГО сервера
   });
 
   server.registerTool(
     `${prefix}_oauth_start`,
     {
       description:
-        `Шаг 1 OAuth-авторизации Google: вернёт ссылку — пользователь открывает её под аккаунтом, у которого есть ${opts.accessSummary}, ` +
-        'и разрешает read-only доступ. ' +
+        'Шаг 1 OAuth-авторизации Google: вернёт ссылку — пользователь открывает её под нужным Google-аккаунтом ' +
+        `и разрешает read-only доступ. Полученный токен видит ${opts.accessSummary}. ` +
         'Требуется OAuth client типа Desktop app (client ID + secret из console.cloud.google.com); переданные clientId/clientSecret сохраняются ' +
         '(при account — в профиль GOOGLE_CLIENT_*__<account>, базовые значения не перезаписываются). ' +
         `После согласия Google отправит браузер на localhost — код подхватится автоматически, затем вызвать ${prefix}_oauth_finish.`,
@@ -79,6 +80,16 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
       const values: Record<string, string> = {};
       if (args.clientId) values[envKey('GOOGLE_CLIENT_ID', args.account)] = args.clientId.trim();
       if (args.clientSecret) values[envKey('GOOGLE_CLIENT_SECRET', args.account)] = args.clientSecret.trim();
+      // GOOGLE_CLIENT_* общие для всех Google-серверов (gsc, ga4) в одном env-файле:
+      // подмена клиента ломает refresh-токены, выданные прежним client_id (Google ответит
+      // invalid_grant, а его текст уводит на «переавторизуйся», не называя причину).
+      // ВАЖНО: читаем прежнее значение ДО saveEnvValues, иначе сравнивали бы с только что записанным.
+      // Если ключ перекрыт реальным окружением процесса, запись в файл не вступит в силу —
+      // клиент фактически не меняется, и предупреждение было бы ложным (для этого случая
+      // ниже отдаётся отдельный warning про override).
+      const prevClientId = args.clientId ? envOr('GOOGLE_CLIENT_ID', args.account) : undefined;
+      const clientOverridden = hasRealEnvOverride('GOOGLE_CLIENT_ID', args.account);
+      const clientRotated = Boolean(prevClientId && prevClientId !== args.clientId?.trim() && !clientOverridden);
       if (Object.keys(values).length) saveEnvValues(values);
       const clientId = envOr('GOOGLE_CLIENT_ID', args.account);
       if (!clientId || !envOr('GOOGLE_CLIENT_SECRET', args.account)) {
@@ -118,6 +129,21 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
               note: args.account
                 ? `clientId/clientSecret сохранены как ${Object.keys(values).join(', ')} (профиль «${args.account}») — базовые GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET не перезаписаны.`
                 : 'clientId/clientSecret сохранены в базовые GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.',
+            }
+          : {}),
+        ...(clientOverridden && args.clientId
+          ? {
+              warning:
+                `Ключ ${envKey('GOOGLE_CLIENT_ID', args.account)} перекрыт реальным окружением процесса (claude mcp add --env) — ` +
+                'переданный clientId сохранён в файл, но авторизация пойдёт со СТАРЫМ значением из окружения. Убери override, чтобы новый клиент заработал.',
+            }
+          : {}),
+        ...(clientRotated
+          ? {
+              warning:
+                `Заменён OAuth-клиент в ${envKey('GOOGLE_CLIENT_ID', args.account)} — он ОБЩИЙ для всех Google-серверов (gsc, ga4). ` +
+                'Refresh-токены, выданные прежним client_id, перестанут работать (Google ответит invalid_grant) — ' +
+                'после этой авторизации переавторизуй и остальные Google-серверы, либо верни прежний clientId.',
             }
           : {}),
       });
@@ -175,7 +201,7 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
         ok: true,
         account,
         refreshToken: maskSecret(data.refresh_token),
-        note: `Токен видит ${opts.accessSummary}. Если OAuth-приложение в статусе Testing — refresh живёт 7 дней (Publish app в consent screen решает). Проверка — ${opts.checkTool}.`,
+        note: `Токен даёт ${opts.accessSummary}. Если OAuth-приложение в статусе Testing — refresh живёт 7 дней (Publish app в consent screen решает). Проверка — ${opts.checkTool}.`,
         ...(hasRealEnvOverride(opts.refreshEnv, args.account)
           ? {
               warning: `Ключ ${refreshEnvKey} перекрыт реальным окружением процесса (claude mcp add --env) — сохранённое в файл значение вступит в силу только после удаления override.`,

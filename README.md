@@ -19,7 +19,7 @@
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
-| `ga4` | `ga4_list_properties`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (все свойства аккаунта) / service account |
+| `ga4` | `ga4_list_properties`, `ga4_metadata`, `ga4_check_compatibility`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (авто-refresh) |
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (URL + пароль API) |
@@ -69,6 +69,8 @@
 
 ### ga4 — Google Analytics 4
 - `ga4_list_properties` — свойства GA4, доступные авторизации (отсюда берётся `propertyId` — это **не** Measurement ID `G-XXXXXXX`)
+- `ga4_metadata` — какие измерения и метрики доступны в ЭТОМ свойстве, включая кастомные (`customEvent:…`); поиск подстрокой, `blockedReasons` (по такой метрике отчёт вернёт нули) и `type` (целое/дробное для `metricFilters`)
+- `ga4_check_compatibility` — совместима ли связка измерений/метрик в этом свойстве, без тяжёлого отчёта; при несовместимости — какие поля убрать
 - `ga4_report` — произвольный отчёт: любые измерения × метрики, фильтры по измерениям, сортировка (полный Data API `runReport`)
 - `ga4_bytime` — динамика метрик по времени (день/час/неделя/месяц)
 - `ga4_traffic_sources` — источники трафика: группа каналов, source/medium, кампания; `organicOnly` — только органика

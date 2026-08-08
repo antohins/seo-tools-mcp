@@ -32,7 +32,7 @@ import {
 
 loadSharedEnv();
 
-const server = new McpServer({ name: 'ywm', version: '1.6.0' });
+const server = new McpServer({ name: 'ywm', version: '1.7.0' });
 
 registerAuthTools(
   server,

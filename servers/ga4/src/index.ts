@@ -11,14 +11,29 @@
  *
  * Даты GA4 считаются в таймзоне СВОЙСТВА, поэтому локальное «сегодня» не вычисляем:
  * принимаем YYYY-MM-DD и родные ключевые слова (today/yesterday/NdaysAgo), а
- * фактическую таймзону возвращаем в ответе (timeZone).
+ * фактическую таймзону возвращаем в ответе (timeZone) — кроме ga4_realtime:
+ * у runRealtimeReport блока metadata нет, и полей-пустышек мы не выдумываем.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, safeHandler } from '@seo-tools/shared';
 import { createGoogleAuth, registerGoogleOauthTools } from '@seo-tools/shared/google';
 import { z } from 'zod';
-import { buildReportBody, flattenAccountSummaries, forbidden403Hint, type Ga4FilterInput, parseReport, resolveProperty } from './logic.js';
+import {
+  buildDimensionFilter,
+  buildMetricFilter,
+  buildReportBody,
+  flattenAccountSummaries,
+  forbidden403Hint,
+  type Ga4FilterInput,
+  type Ga4MetricFilterInput,
+  type Ga4Property,
+  incompatibleFieldsFromError,
+  parseCompatibility,
+  parseMetadata,
+  parseReport,
+  resolveProperty,
+} from './logic.js';
 
 loadSharedEnv();
 
@@ -27,19 +42,24 @@ const ADMIN_API = 'https://analyticsadmin.googleapis.com/v1beta';
 const SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 // порт отличается от gsc (8585): серверы могут работать одновременно
 const OAUTH_PORT = Number(process.env.GA4_OAUTH_PORT || 8586); // реальный env процесса — ок
+const LIST_DEADLINE_MS = 2 * 60_000; // потолок на весь обход страниц ga4_list_properties
 
 const auth = createGoogleAuth({
   toolPrefix: 'ga4',
   scope: SCOPE,
   refreshEnv: 'GA4_REFRESH_TOKEN',
   saJsonEnv: 'GA4_SA_JSON',
-  apiName: 'Google Analytics Data API',
+  apiName: 'Google Analytics API (Data + Admin)',
   noAuthHint: (account) =>
     `Нет авторизации GA4${account ? ` для аккаунта «${account}»` : ''}. ` +
     `Либо OAuth: ga4_oauth_start${account ? ` (account="${account}")` : ''} → ссылка → ga4_oauth_finish (токен видит все свойства аккаунта), ` +
     'либо сервис-аккаунт: ga4_save_sa_json / ga4_set_credentials (GA4_SA_JSON) + добавить его email в свойство GA4. ' +
     'Текущий статус ключей и инструкция — ga4_auth_status.',
   forbiddenHint: forbidden403Hint,
+  quotaHint:
+    'У Data API квоты считаются «токенами» на СВОЙСТВО, тремя раздельными корзинами (Core / Realtime / Funnel), ' +
+    'почасово и посуточно; тяжёлые запросы съедают их быстрее — уменьши limit и число измерений, разбей период ' +
+    'или подожди восстановления. (У Admin API — ga4_list_properties — квоты отдельные, там помогает только пауза.)',
 });
 
 /** runReport по свойству: собирает тело, шлёт и нормализует ответ. */
@@ -55,6 +75,10 @@ async function runReport(args: {
   limit: number;
   offset?: number;
   keepEmptyRows?: boolean;
+  compareStartDate?: string;
+  compareEndDate?: string;
+  metricFilters?: Ga4MetricFilterInput[];
+  includeTotals?: boolean;
   account?: string;
 }) {
   const body = buildReportBody(args);
@@ -64,7 +88,18 @@ async function runReport(args: {
     args.account,
     args.property,
   );
-  return parseReport(data, args.limit);
+  const report = parseReport(data, { offset: args.offset });
+  // limit в GA4 — на ВЕСЬ ответ, а не на каждый период: при сравнении строки двух периодов
+  // делят общий лимит по единому ранжированию, поэтому пары могут быть неполными
+  if (args.compareStartDate && args.compareEndDate && report.truncated) {
+    return {
+      ...report,
+      note:
+        `limit=${args.limit} действует на весь ответ, а не на каждый период: строки current и previous делят его между собой ` +
+        'по общему ранжированию, поэтому часть строк осталась без пары. Увеличь limit (ориентировочно вдвое) для полного сопоставления.',
+    };
+  }
+  return report;
 }
 
 /** Общие параметры отчётов: период, лимит, профиль. */
@@ -73,10 +108,17 @@ const reportInput = {
   startDate: z.string().default('28daysAgo').describe('YYYY-MM-DD или ключевое слово GA4: today, yesterday, NdaysAgo'),
   endDate: z.string().default('yesterday').describe('YYYY-MM-DD или ключевое слово GA4'),
   limit: z.number().int().min(1).max(100_000).default(100).describe('Сколько строк вернуть (в ответе totalRows/truncated)'),
+  // сравнение периодов и итоги доступны во ВСЕХ отчётных инструментах
+  compareStartDate: z
+    .string()
+    .optional()
+    .describe('Начало периода сравнения (вместе с compareEndDate). В строках появится колонка dateRange: current/previous'),
+  compareEndDate: z.string().optional().describe('Конец периода сравнения'),
+  includeTotals: z.boolean().default(false).describe('Добавить итоги по метрикам (поле totals; при сравнении — по строке на период)'),
   account: accountParam,
 };
 
-const server = new McpServer({ name: 'ga4', version: '1.6.0' });
+const server = new McpServer({ name: 'ga4', version: '1.7.0' });
 
 registerAuthTools(
   server,
@@ -123,14 +165,185 @@ server.registerTool(
   'ga4_list_properties',
   {
     description:
-      'Свойства GA4, доступные авторизации (Admin API accountSummaries). Возвращает { propertyId, displayName, account, accountName } — ' +
-      'propertyId нужен всем остальным инструментам (это НЕ Measurement ID G-XXXXXXX). Заодно проверка доступов.',
+      'Свойства GA4, доступные авторизации (Admin API accountSummaries, с полным обходом страниц). ' +
+      'Возвращает { propertyId, displayName, account, accountName } — propertyId нужен всем остальным инструментам ' +
+      '(это НЕ Measurement ID G-XXXXXXX). Заодно проверка доступов.',
     inputSchema: { account: accountParam },
   },
   safeHandler(async (args) => {
-    const data = await auth.googleFetch<any>(`${ADMIN_API}/accountSummaries?pageSize=200`, { method: 'GET' }, args.account);
-    const properties = flattenAccountSummaries(data);
-    return jsonResult({ count: properties.length, properties, truncated: Boolean(data?.nextPageToken) });
+    // pageSize=200 — максимум Admin API, поэтому у крупных агентств (>200 аккаунтов)
+    // обязателен обход по nextPageToken, иначе часть свойств просто не видна
+    const properties: Ga4Property[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
+    const deadline = Date.now() + LIST_DEADLINE_MS;
+    do {
+      const qs = new URLSearchParams({ pageSize: '200', ...(pageToken ? { pageToken } : {}) });
+      // attempts:2 — при 20 страницах дефолтные 3 ретрая × 120 с таймаута растянули бы вызов на десятки минут
+      const data = await auth.googleFetch<any>(`${ADMIN_API}/accountSummaries?${qs}`, { method: 'GET', attempts: 2 }, args.account);
+      properties.push(...flattenAccountSummaries(data));
+      pageToken = data?.nextPageToken ? String(data.nextPageToken) : undefined;
+    } while (pageToken && ++pages < 20 && Date.now() < deadline); // страховки: число страниц и общий дедлайн
+    return jsonResult({ count: properties.length, properties, truncated: Boolean(pageToken) });
+  }),
+);
+
+server.registerTool(
+  'ga4_metadata',
+  {
+    description:
+      'Какие измерения и метрики доступны В ЭТОМ свойстве GA4 (Data API getMetadata), включая КАСТОМНЫЕ ' +
+      '(customEvent:… / customUser:…). ВЫЗЫВАТЬ ПЕРЕД ga4_report, если не уверен в именах полей: ' +
+      'их сотни (порядка 375 измерений и 119 метрик), и точные API-имена не угадываются. ' +
+      'search — подстрока по имени/описанию; customOnly — только кастомные поля свойства. ' +
+      'ВАЖНО: у метрики может быть blockedReasons — по такой отчёт вернёт ОДНИ НУЛИ без ошибки, ' +
+      'а metricFilters по ней упадёт с 400. Поле type подсказывает, целое или дробное класть в metricFilters.',
+    inputSchema: {
+      propertyId: z.string().optional().describe('Числовой id свойства (по умолчанию GA4_PROPERTY_ID)'),
+      search: z.string().optional().describe('Подстрока для поиска (регистронезависимо), например "landing", "revenue", "organic"'),
+      customOnly: z.boolean().default(false).describe('Только кастомные определения свойства'),
+      limit: z.number().int().min(1).max(200).default(50).describe('Сколько полей каждого типа вернуть'),
+      withDescriptions: z
+        .boolean()
+        .default(false)
+        .describe('Включить описания полей (ответ вырастет в разы; поиск по описанию работает всегда)'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const property = resolveProperty(args.propertyId, args.account);
+    const data = await auth.googleFetch<any>(`${DATA_API}/${property}/metadata`, { method: 'GET' }, args.account, property);
+    return jsonResult({
+      property,
+      ...parseMetadata(data, {
+        search: args.search,
+        customOnly: args.customOnly,
+        limit: args.limit,
+        withDescriptions: args.withDescriptions,
+      }),
+    });
+  }),
+);
+
+server.registerTool(
+  'ga4_check_compatibility',
+  {
+    description:
+      'Совместима ли связка измерений/метрик В ЭТОМ свойстве (Data API checkCompatibility) — проверка БЕЗ тяжёлого отчёта. ' +
+      'compatible=true означает, что такой отчёт пройдёт; при false в incompatibleFields — поля, которые GA4 просит убрать. ' +
+      'Дополнительно возвращает canAddDimensions/canAddMetrics — что ЕЩЁ можно добавить к этому запросу, сохранив совместимость. ' +
+      'Совместимость зависит от свойства: например, метрики Search Console (organicGoogleSearchClicks и др.) работают только ' +
+      'при связке GA4 ↔ Search Console, иначе не сочетаются ни с одним измерением. ' +
+      'Фильтры тоже влияют на совместимость — передавай те же filters/metricFilters, что и в будущем отчёте.',
+    inputSchema: {
+      propertyId: z.string().optional().describe('Числовой id свойства (по умолчанию GA4_PROPERTY_ID)'),
+      dimensions: z.array(z.string()).default([]).describe('Проверяемые измерения'),
+      metrics: z.array(z.string()).default([]).describe('Проверяемые метрики'),
+      filters: z
+        .array(
+          z.object({
+            dimension: z.string(),
+            matchType: z.enum(['EXACT', 'BEGINS_WITH', 'ENDS_WITH', 'CONTAINS', 'FULL_REGEXP', 'PARTIAL_REGEXP']),
+            value: z.string(),
+            caseSensitive: z.boolean().optional(),
+            not: z.boolean().optional(),
+          }),
+        )
+        .optional()
+        .describe('Те же фильтры по измерениям, что пойдут в отчёт (они участвуют в проверке совместимости)'),
+      metricFilters: z
+        .array(
+          z.object({
+            metric: z.string(),
+            operation: z.enum(['EQUAL', 'LESS_THAN', 'LESS_THAN_OR_EQUAL', 'GREATER_THAN', 'GREATER_THAN_OR_EQUAL']),
+            value: z.number(),
+          }),
+        )
+        .optional()
+        .describe('Те же фильтры по метрикам, что пойдут в отчёт'),
+      limit: z.number().int().min(1).max(200).default(40).describe('Сколько «можно добавить»-полей вернуть'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const property = resolveProperty(args.propertyId, args.account);
+    if (!args.dimensions.length && !args.metrics.length) {
+      throw new Error('Укажи хотя бы одно измерение или метрику для проверки совместимости.');
+    }
+    const dimFilter = buildDimensionFilter(args.filters);
+    const metFilter = buildMetricFilter(args.metricFilters);
+    const body = {
+      ...(args.dimensions.length ? { dimensions: args.dimensions.map((name) => ({ name })) } : {}),
+      ...(args.metrics.length ? { metrics: args.metrics.map((name) => ({ name })) } : {}),
+      ...(dimFilter ? { dimensionFilter: dimFilter } : {}),
+      ...(metFilter ? { metricFilter: metFilter } : {}),
+      compatibilityFilter: 'COMPATIBLE',
+    };
+    const requested = { dimensions: args.dimensions, metrics: args.metrics };
+    /** Одиночная проверка: совместимо ли подмножество полей (true/false). */
+    const isCompatible = async (dims: string[], mets: string[]): Promise<boolean> => {
+      try {
+        await auth.googleFetch<any>(
+          `${DATA_API}/${property}:checkCompatibility`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              ...(dims.length ? { dimensions: dims.map((name) => ({ name })) } : {}),
+              ...(mets.length ? { metrics: mets.map((name) => ({ name })) } : {}),
+              compatibilityFilter: 'COMPATIBLE',
+            }),
+          },
+          args.account,
+          property,
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      const data = await auth.googleFetch<any>(
+        `${DATA_API}/${property}:checkCompatibility`,
+        { method: 'POST', body: JSON.stringify(body) },
+        args.account,
+        property,
+      );
+      // успех = сама связка совместима; в ответе — то, что можно ДОБАВИТЬ (сотни полей, режем)
+      return jsonResult({ property, requested, compatible: true, ...parseCompatibility(data, args.limit) });
+    } catch (err) {
+      // метод специально ПАДАЕТ на несовместимой связке — это валидный вердикт, а не сбой
+      const message = err instanceof Error ? err.message : String(err);
+      let bad = incompatibleFieldsFromError(message);
+      if (!bad.length && !/incompatible/i.test(message)) throw err;
+      // GA4 у этого метода отвечает коротким «The dimensions and metrics are incompatible»
+      // без имён полей, поэтому виновника ищем сами — методом ИСКЛЮЧЕНИЯ: поле виновно, если
+      // без него остальной набор становится совместимым. (Проверять «поле + все метрики» нельзя:
+      // плохая метрика остаётся в наборе, и виновными выглядят все поля подряд.)
+      // Число проб ограничено, чтобы не разогнать квоту на большом запросе.
+      const fields = [...args.metrics.map((n) => ({ n, metric: true })), ...args.dimensions.map((n) => ({ n, metric: false }))];
+      if (!bad.length && fields.length > 1 && fields.length <= 8) {
+        const probes = await Promise.all(
+          fields.map(async (f) => {
+            const dims = f.metric ? args.dimensions : args.dimensions.filter((d) => d !== f.n);
+            const mets = f.metric ? args.metrics.filter((m) => m !== f.n) : args.metrics;
+            if (!dims.length && !mets.length) return null; // пустой набор проверять бессмысленно
+            return (await isCompatible(dims, mets)) ? f.n : null;
+          }),
+        );
+        bad = probes.filter((x): x is string => Boolean(x));
+      }
+      return jsonResult({
+        property,
+        requested,
+        compatible: false,
+        incompatibleFields: bad,
+        note: bad.length
+          ? `Не сочетаются с остальным запросом: ${bad.join(', ')} — убери их или замени измерения. ` +
+            '(Метрики Search Console требуют связки GA4 ↔ Search Console.)'
+          : 'GA4 считает связку несовместимой, но не назвал поле. Проверь поля по одному этим же инструментом.',
+        apiMessage: message.slice(0, 300),
+      });
+    }
   }),
 );
 
@@ -138,7 +351,9 @@ server.registerTool(
   'ga4_report',
   {
     description:
-      'Произвольный отчёт GA4 (Data API runReport): любые измерения × метрики, фильтры, сортировка. ' +
+      'Произвольный отчёт GA4 (Data API runReport): любые измерения × метрики, фильтры по измерениям и по значениям метрик, ' +
+      'сортировка, сравнение периодов (compareStartDate/compareEndDate) и итоги (includeTotals). ' +
+      'Если не уверен в именах полей — сначала ga4_metadata; если боишься 400 «incompatible» — ga4_check_compatibility. ' +
       'Имена — как в API: измерения (date, sessionSourceMedium, pagePath, country, deviceCategory, eventName…), ' +
       'метрики (activeUsers, newUsers, sessions, screenPageViews, engagedSessions, engagementRate, bounceRate, ' +
       'averageSessionDuration, eventCount, keyEvents, totalRevenue…). ' +
@@ -160,7 +375,17 @@ server.registerTool(
         )
         .optional()
         .describe('Фильтры по измерениям (между собой — AND)'),
-      orderBy: z.string().optional().describe('Метрика или измерение для сортировки'),
+      metricFilters: z
+        .array(
+          z.object({
+            metric: z.string().describe('Имя метрики, например sessions'),
+            operation: z.enum(['EQUAL', 'LESS_THAN', 'LESS_THAN_OR_EQUAL', 'GREATER_THAN', 'GREATER_THAN_OR_EQUAL']),
+            value: z.number(),
+          }),
+        )
+        .optional()
+        .describe('Фильтры по ЗНАЧЕНИЯМ метрик (между собой — AND), например sessions > 50 — отсечь шумовые строки'),
+      orderBy: z.string().optional().describe('Метрика или измерение для сортировки (обязано быть в metrics/dimensions этого запроса)'),
       orderDesc: z.boolean().default(true).describe('Сортировать по убыванию'),
       offset: z.number().int().min(0).optional().describe('Смещение для постраничного обхода'),
       keepEmptyRows: z.boolean().default(false).describe('Возвращать строки с нулями'),
@@ -283,24 +508,37 @@ server.registerTool(
   'ga4_top_pages',
   {
     description:
-      'Топ страниц GA4: по URL страницы (pagePath), заголовку или странице входа (landingPage). ' +
+      'Топ страниц GA4: по URL страницы (pagePath), заголовку или странице входа. ' +
+      'groupBy=landing использует landingPagePlusQueryString (у устаревшего landingPage с 2023 обрезается query string, ' +
+      'и цифры расходятся с отчётом «Целевая страница» в интерфейсе GA4). ' +
       'organicOnly=true — только органический поиск (полезно для SEO-аналитики посадочных).',
     inputSchema: {
       ...reportInput,
       groupBy: z.enum(['page', 'landing', 'title']).default('page'),
       metrics: z.array(z.string()).default(['screenPageViews', 'sessions', 'activeUsers', 'engagementRate']),
       organicOnly: z.boolean().default(false).describe('Только Organic Search'),
-      pathContains: z.string().optional().describe('Фильтр по подстроке пути (CONTAINS)'),
+      pathContains: z
+        .string()
+        .optional()
+        .describe('Фильтр по подстроке пути (CONTAINS): по группирующему измерению, а при groupBy=title — по pagePath'),
     },
   },
   safeHandler(async (args) => {
     const property = resolveProperty(args.propertyId, args.account);
-    const dim = args.groupBy === 'page' ? 'pagePath' : args.groupBy === 'landing' ? 'landingPage' : 'pageTitle';
+    const dim = args.groupBy === 'page' ? 'pagePath' : args.groupBy === 'landing' ? 'landingPagePlusQueryString' : 'pageTitle';
     const filters: Ga4FilterInput[] = [];
     if (args.organicOnly) filters.push({ dimension: 'sessionDefaultChannelGroup', matchType: 'EXACT', value: 'Organic Search' });
-    if (args.pathContains) filters.push({ dimension: dim, matchType: 'CONTAINS', value: args.pathContains });
+    // фильтр по пути всегда идёт по pagePath: при groupBy=title фильтрация по заголовку
+    // дала бы пустой результат, хотя параметр обещает подстроку URL
+    // Фильтруем ПО ГРУППИРУЮЩЕМУ измерению: при groupBy=landing фильтр по pagePath дал бы
+    // «лендинги сессий, где вообще просматривали /blog», а не «лендинги внутри /blog»
+    // (landingPagePlusQueryString — session-scope, pagePath — event-scope).
+    // Исключение — groupBy=title: заголовок не путь, поэтому подстрока пути идёт по pagePath.
+    if (args.pathContains) {
+      filters.push({ dimension: args.groupBy === 'title' ? 'pagePath' : dim, matchType: 'CONTAINS', value: args.pathContains });
+    }
     const report = await runReport({ ...args, property, dimensions: [dim], filters, orderBy: args.metrics[0] });
-    return jsonResult({ property, groupBy: args.groupBy, startDate: args.startDate, endDate: args.endDate, ...report });
+    return jsonResult({ property, groupBy: args.groupBy, dimension: dim, startDate: args.startDate, endDate: args.endDate, ...report });
   }),
 );
 
@@ -309,21 +547,39 @@ server.registerTool(
   {
     description:
       'События GA4: количество событий и пользователей по eventName. ' +
-      'keyEventsOnly=true — только ключевые события (бывшие конверсии; метрика keyEvents доступна не во всех свойствах — ' +
-      'если API вернёт ошибку по метрике, вызови с keyEventsOnly=false).',
+      'keyEventsOnly=true — оставить ТОЛЬКО ключевые события (бывшие конверсии): фильтр по измерению isKeyEvent + метрика keyEvents ' +
+      '(и измерение, и метрика есть не во всех свойствах — если API ответит ошибкой по полю, вызови с keyEventsOnly=false).',
     inputSchema: {
       ...reportInput,
       metrics: z.array(z.string()).default(['eventCount', 'activeUsers']),
-      keyEventsOnly: z.boolean().default(false).describe('Считать только ключевые события (добавляет метрику keyEvents)'),
+      keyEventsOnly: z.boolean().default(false).describe('Только ключевые события: фильтр isKeyEvent=true + метрика keyEvents'),
       eventName: z.string().optional().describe('Точное имя события для фильтра'),
     },
   },
   safeHandler(async (args) => {
     const property = resolveProperty(args.propertyId, args.account);
     const metrics = args.keyEventsOnly ? [...new Set([...args.metrics, 'keyEvents'])] : args.metrics;
-    const filters: Ga4FilterInput[] = args.eventName ? [{ dimension: 'eventName', matchType: 'EXACT', value: args.eventName }] : [];
+    const filters: Ga4FilterInput[] = [];
+    if (args.eventName) filters.push({ dimension: 'eventName', matchType: 'EXACT', value: args.eventName });
+    // ключевые события отсекаются ФИЛЬТРОМ по isKeyEvent (переименовано из isConversionEvent):
+    // одной лишь метрики keyEvents мало — без фильтра в выдачу попадают все события подряд
+    if (args.keyEventsOnly) filters.push({ dimension: 'isKeyEvent', matchType: 'EXACT', value: 'true' });
     const report = await runReport({ ...args, property, dimensions: ['eventName'], metrics, filters, orderBy: metrics[0] });
-    return jsonResult({ property, startDate: args.startDate, endDate: args.endDate, ...report });
+    // Пустой результат при keyEventsOnly — почти всегда «ключевые события не размечены»,
+    // а не «их не было»: фильтр EXACT «true» отсекает всё молча, без ошибки API
+    const note =
+      args.keyEventsOnly && report.count === 0
+        ? 'Ключевых событий не найдено. Проверь, что события отмечены как ключевые в GA4 (Администратор → События), ' +
+          'и что период выбран верно; для сверки вызови этот же инструмент с keyEventsOnly=false.'
+        : undefined;
+    return jsonResult({
+      property,
+      keyEventsOnly: args.keyEventsOnly,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      ...report,
+      ...(note ? { note } : {}),
+    });
   }),
 );
 
@@ -357,7 +613,8 @@ server.registerTool(
       args.account,
       property,
     );
-    return jsonResult({ property, realtime: true, ...parseReport(data, args.limit) });
+    // withMetadata:false — у realtime-ответа нет блока metadata (ни timeZone, ни currency, ни порога)
+    return jsonResult({ property, realtime: true, ...parseReport(data, { withMetadata: false }) });
   }),
 );
 

@@ -124,12 +124,75 @@ describe('buildReportBody', () => {
     });
   });
 
+  it('orderBy не из запроса → понятная локальная ошибка, а не 400 «not a valid dimension»', () => {
+    // раньше метрика, забытая в metrics, уходила как dimension и API отвечал невнятной ошибкой
+    expect(() => logic.buildReportBody({ ...base, orderBy: 'activeUsers' })).toThrow(/не входит ни в metrics/);
+    expect(() => logic.buildReportBody({ ...base, orderBy: 'activeUsers' })).toThrow(/sessions/);
+  });
+
   it('без метрик → ошибка до запроса', () => {
     expect(() => logic.buildReportBody({ ...base, metrics: [] })).toThrow(/метрики/);
   });
 
   it('невалидные даты ловятся до запроса', () => {
     expect(() => logic.buildReportBody({ ...base, startDate: '2026/01/01' })).toThrow(/startDate/);
+  });
+
+  it('сравнение периодов → два именованных dateRange', () => {
+    const b = logic.buildReportBody({ ...base, compareStartDate: '56daysAgo', compareEndDate: '29daysAgo' }) as any;
+    expect(b.dateRanges).toEqual([
+      { startDate: '28daysAgo', endDate: 'yesterday', name: 'current' },
+      { startDate: '56daysAgo', endDate: '29daysAgo', name: 'previous' },
+    ]);
+  });
+
+  it('половина периода сравнения → ошибка до запроса', () => {
+    expect(() => logic.buildReportBody({ ...base, compareStartDate: '56daysAgo' })).toThrow(/ОБА параметра/);
+    expect(() => logic.buildReportBody({ ...base, compareEndDate: '29daysAgo' })).toThrow(/ОБА параметра/);
+  });
+
+  it('даты периода сравнения тоже валидируются', () => {
+    expect(() => logic.buildReportBody({ ...base, compareStartDate: '01.01.2026', compareEndDate: 'yesterday' })).toThrow(/startDate/);
+  });
+
+  it('includeTotals → metricAggregations, иначе поля нет', () => {
+    expect((logic.buildReportBody({ ...base, includeTotals: true }) as any).metricAggregations).toEqual(['TOTAL']);
+    expect((logic.buildReportBody(base) as any).metricAggregations).toBeUndefined();
+  });
+});
+
+describe('buildMetricFilter', () => {
+  it('пусто → undefined', () => {
+    expect(logic.buildMetricFilter()).toBeUndefined();
+    expect(logic.buildMetricFilter([])).toBeUndefined();
+  });
+
+  it('целое → int64Value строкой, дробное → doubleValue', () => {
+    expect(logic.buildMetricFilter([{ metric: 'sessions', operation: 'GREATER_THAN', value: 50 }])).toEqual({
+      filter: { fieldName: 'sessions', numericFilter: { operation: 'GREATER_THAN', value: { int64Value: '50' } } },
+    });
+    const f = logic.buildMetricFilter([{ metric: 'engagementRate', operation: 'LESS_THAN', value: 0.5 }]) as any;
+    expect(f.filter.numericFilter.value).toEqual({ doubleValue: 0.5 });
+  });
+
+  it('несколько условий объединяются AND', () => {
+    const f = logic.buildMetricFilter([
+      { metric: 'sessions', operation: 'GREATER_THAN', value: 10 },
+      { metric: 'bounceRate', operation: 'LESS_THAN', value: 0.7 },
+    ]) as any;
+    expect(f.andGroup.expressions).toHaveLength(2);
+  });
+
+  it('попадает в тело отчёта как metricFilter', () => {
+    const b = logic.buildReportBody({
+      startDate: '28daysAgo',
+      endDate: 'yesterday',
+      dimensions: ['pagePath'],
+      metrics: ['sessions'],
+      limit: 10,
+      metricFilters: [{ metric: 'sessions', operation: 'GREATER_THAN_OR_EQUAL', value: 100 }],
+    }) as any;
+    expect(b.metricFilter.filter.fieldName).toBe('sessions');
   });
 });
 
@@ -146,7 +209,7 @@ describe('parseReport', () => {
   };
 
   it('строки → плоские объекты, метрики приводятся к числам', () => {
-    const r = logic.parseReport(sample, 100);
+    const r = logic.parseReport(sample);
     expect(r.count).toBe(2);
     expect(r.rows[0]).toEqual({ date: '20260801', sessions: 150, bounceRate: 0.4523 });
     expect(r.totalRows).toBe(2);
@@ -157,17 +220,34 @@ describe('parseReport', () => {
   });
 
   it('rowCount больше отданных строк → truncated', () => {
-    const r = logic.parseReport({ ...sample, rowCount: 500 }, 2);
+    const r = logic.parseReport({ ...sample, rowCount: 500 });
     expect(r.truncated).toBe(true);
     expect(r.totalRows).toBe(500);
   });
 
+  it('последняя страница при offset → truncated=false (не зацикливаем пагинацию)', () => {
+    // всего 450 строк, взяли последние 50 со смещением 400: обрезки НЕТ
+    const r = logic.parseReport({ ...sample, rowCount: 450 }, { offset: 448 });
+    expect(r.count).toBe(2);
+    expect(r.truncated).toBe(false);
+    // а вот в середине выборки обрезка есть
+    expect(logic.parseReport({ ...sample, rowCount: 450 }, { offset: 100 }).truncated).toBe(true);
+  });
+
+  it('realtime (withMetadata:false) → полей метаданных нет вовсе, а не null-пустышки', () => {
+    const r = logic.parseReport({ ...sample, metadata: undefined }, { withMetadata: false });
+    expect(r.count).toBe(2);
+    expect('timeZone' in r).toBe(false);
+    expect('currency' in r).toBe(false);
+    expect('thresholded' in r).toBe(false);
+  });
+
   it('порог конфиденциальности отражается флагом', () => {
-    expect(logic.parseReport({ ...sample, metadata: { subjectToThresholding: true } }, 100).thresholded).toBe(true);
+    expect(logic.parseReport({ ...sample, metadata: { subjectToThresholding: true } }).thresholded).toBe(true);
   });
 
   it('пустой/битый ответ → безопасные значения без падения', () => {
-    expect(logic.parseReport({}, 100)).toEqual({
+    expect(logic.parseReport({})).toEqual({
       rows: [],
       count: 0,
       totalRows: null,
@@ -207,5 +287,158 @@ describe('flattenAccountSummaries', () => {
   it('аккаунты без свойств и битый ответ не ломают разбор', () => {
     expect(logic.flattenAccountSummaries({ accountSummaries: [{ account: 'accounts/1' }] })).toEqual([]);
     expect(logic.flattenAccountSummaries(null)).toEqual([]);
+  });
+});
+describe('parseMetadata', () => {
+  const meta = {
+    dimensions: [
+      { apiName: 'landingPage', uiName: 'Landing page', category: 'Page / Screen', description: 'Page path of first pageview' },
+      { apiName: 'pagePath', uiName: 'Page path', category: 'Page / Screen' },
+      { apiName: 'customEvent:level', uiName: 'Level', category: 'Custom', customDefinition: true },
+    ],
+    metrics: [
+      { apiName: 'sessions', uiName: 'Sessions', category: 'Session', type: 'TYPE_INTEGER' },
+      {
+        apiName: 'totalRevenue',
+        uiName: 'Total revenue',
+        category: 'Revenue',
+        type: 'TYPE_CURRENCY',
+        blockedReasons: ['NO_REVENUE_METRICS'],
+      },
+    ],
+  };
+
+  it('счётчики раздельные: сколько подошло под фильтр и сколько всего в свойстве', () => {
+    const r = logic.parseMetadata(meta, { search: 'landing' });
+    expect(r.matchedDimensions).toBe(1);
+    expect(r.dimensionsInProperty).toBe(3); // всего у свойства, а не «сколько нашли»
+    expect(r.matchedMetrics).toBe(0);
+    expect(r.metricsInProperty).toBe(2);
+  });
+
+  it('type и blockedReasons сохраняются (нули без ошибки / 400 в metricFilters)', () => {
+    const m = logic.parseMetadata(meta).metrics.find((x) => x.apiName === 'totalRevenue');
+    expect(m?.type).toBe('TYPE_CURRENCY');
+    expect(m?.blockedReasons).toEqual(['NO_REVENUE_METRICS']);
+    // у незаблокированной метрики поля нет
+    expect(logic.parseMetadata(meta).metrics.find((x) => x.apiName === 'sessions')?.blockedReasons).toBeUndefined();
+  });
+
+  it('описания по умолчанию не отдаются, но поиск по ним работает', () => {
+    expect(logic.parseMetadata(meta).dimensions[0].description).toBeUndefined();
+    expect(logic.parseMetadata(meta, { withDescriptions: true }).dimensions[0].description).toContain('first pageview');
+    // ищем по тексту, которого нет ни в apiName, ни в uiName
+    expect(logic.parseMetadata(meta, { search: 'first pageview' }).dimensions.map((d) => d.apiName)).toEqual(['landingPage']);
+  });
+
+  it('customOnly оставляет только кастомные', () => {
+    const r = logic.parseMetadata(meta, { customOnly: true });
+    expect(r.dimensions.map((d) => d.apiName)).toEqual(['customEvent:level']);
+    expect(r.matchedMetrics).toBe(0);
+  });
+
+  it('truncated раздельный по спискам', () => {
+    const r = logic.parseMetadata(meta, { limit: 1 });
+    expect(r.dimensionsTruncated).toBe(true); // 3 подошло, показали 1
+    expect(r.metricsTruncated).toBe(true); // 2 подошло, показали 1
+    expect(logic.parseMetadata(meta, { limit: 50 }).dimensionsTruncated).toBe(false);
+  });
+
+  it('битый ответ не роняет разбор', () => {
+    expect(logic.parseMetadata(null).dimensionsInProperty).toBe(0);
+    expect(logic.parseMetadata({}).metrics).toEqual([]);
+  });
+});
+
+describe('parseCompatibility', () => {
+  // Контракт метода: ответ перечисляет поля, которые МОЖНО ДОБАВИТЬ к запросу,
+  // а не статус запрошенных полей. Несовместимость самой связки = ошибка вызова.
+  const sample = {
+    dimensionCompatibilities: [
+      { dimensionMetadata: { apiName: 'date' }, compatibility: 'COMPATIBLE' },
+      { dimensionMetadata: { apiName: 'city' }, compatibility: 'COMPATIBLE' },
+      { dimensionMetadata: { apiName: 'campaignId' }, compatibility: 'INCOMPATIBLE' },
+    ],
+    metricCompatibilities: [
+      { metricMetadata: { apiName: 'sessions' }, compatibility: 'COMPATIBLE' },
+      { metricMetadata: { apiName: 'organicGoogleSearchClicks' }, compatibility: 'INCOMPATIBLE' },
+    ],
+  };
+
+  it('берёт ТОЛЬКО COMPATIBLE — это поля, которые можно добавить', () => {
+    const r = logic.parseCompatibility(sample);
+    expect(r.canAddDimensions).toEqual(['date', 'city']);
+    expect(r.canAddMetrics).toEqual(['sessions']);
+    expect(r.canAddDimensionsTotal).toBe(2);
+    expect(r.canAddMetricsTotal).toBe(1);
+    expect(r.truncated).toBe(false);
+  });
+
+  it('длинный список обрезается лимитом (у свойства таких полей сотни)', () => {
+    const r = logic.parseCompatibility(sample, 1);
+    expect(r.canAddDimensions).toEqual(['date']);
+    expect(r.canAddDimensionsTotal).toBe(2);
+    expect(r.truncated).toBe(true);
+  });
+
+  it('пустой ответ → пустые списки', () => {
+    expect(logic.parseCompatibility(null).canAddDimensions).toEqual([]);
+  });
+});
+
+describe('incompatibleFieldsFromError', () => {
+  it('достаёт поля из живого текста ошибки GA4', () => {
+    const msg =
+      "Please remove organicGoogleSearchAveragePosition and organicGoogleSearchClicks and organicGoogleSearchImpressions to make the request compatible for example. The request's dimensions & metrics are incompatible.";
+    expect(logic.incompatibleFieldsFromError(msg)).toEqual([
+      'organicGoogleSearchAveragePosition',
+      'organicGoogleSearchClicks',
+      'organicGoogleSearchImpressions',
+    ]);
+  });
+
+  it('чужой текст → пустой список', () => {
+    expect(logic.incompatibleFieldsFromError('some other error')).toEqual([]);
+  });
+});
+
+describe('parseReport: итоги', () => {
+  it('в totals служебные RESERVED_* отбрасываются, а метка периода сохраняется', () => {
+    const r = logic.parseReport({
+      dimensionHeaders: [{ name: 'pagePath' }, { name: 'dateRange' }],
+      metricHeaders: [{ name: 'sessions' }],
+      rows: [{ dimensionValues: [{ value: '/' }, { value: 'current' }], metricValues: [{ value: '10' }] }],
+      totals: [
+        { dimensionValues: [{ value: 'RESERVED_TOTAL' }, { value: 'current' }], metricValues: [{ value: '999' }] },
+        { dimensionValues: [{ value: 'RESERVED_TOTAL' }, { value: 'previous' }], metricValues: [{ value: '888' }] },
+      ],
+      rowCount: 1,
+    });
+    // без метки периода нельзя понять, какой итог к какому периоду относится
+    expect(r.totals).toEqual([
+      { dateRange: 'current', sessions: 999 },
+      { dateRange: 'previous', sessions: 888 },
+    ]);
+    expect(JSON.stringify(r.totals)).not.toContain('RESERVED_TOTAL');
+  });
+
+  it('строки при сравнении содержат колонку dateRange', () => {
+    const r = logic.parseReport({
+      dimensionHeaders: [{ name: 'dateRange' }],
+      metricHeaders: [{ name: 'sessions' }],
+      rows: [
+        { dimensionValues: [{ value: 'current' }], metricValues: [{ value: '5' }] },
+        { dimensionValues: [{ value: 'previous' }], metricValues: [{ value: '3' }] },
+      ],
+      rowCount: 2,
+    });
+    expect(r.rows).toEqual([
+      { dateRange: 'current', sessions: 5 },
+      { dateRange: 'previous', sessions: 3 },
+    ]);
+  });
+
+  it('без totals поле отсутствует', () => {
+    expect('totals' in logic.parseReport({ rowCount: 0 })).toBe(false);
   });
 });

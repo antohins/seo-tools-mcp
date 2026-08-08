@@ -24,7 +24,6 @@ const PAGE_SIZE = 25_000; // максимум GSC API за запрос
 const QUERY_DEADLINE_MS = 5 * 60_000; // общий потолок на всю пагинацию одного gsc_query
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const OAUTH_PORT = Number(process.env.GSC_OAUTH_PORT || 8585); // реальный env процесса — ок
-const REDIRECT_URI = `http://localhost:${OAUTH_PORT}`;
 
 // Авторизация Google — общая фабрика (кеш токена по профилю, дедуп refresh, JWT для
 // сервис-аккаунта, 401-ретрай только для OAuth, 403 → доменная подсказка).
@@ -78,7 +77,7 @@ async function queryAll(siteUrl: string, body: Record<string, unknown>, limit: n
   return { rows, truncated, truncatedBy, firstIncompleteDate };
 }
 
-const server = new McpServer({ name: 'gsc', version: '1.6.0' });
+const server = new McpServer({ name: 'gsc', version: '1.7.0' });
 
 registerAuthTools(
   server,

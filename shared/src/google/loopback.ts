@@ -27,7 +27,14 @@ export function createLoopbackManager(opts: {
   redirectUri: string;
   getFlow: () => OauthFlow | null;
   autoCloseMs?: number;
+  /**
+   * Префикс инструментов сервера ('gsc' | 'ga4') — подставляется в страницу, которую видит
+   * пользователь. ОБЯЗАТЕЛЕН: с дефолтом новый Google-сервер молча отправлял бы юзера
+   * вызывать инструмент чужого сервера, и компилятор бы это не поймал.
+   */
+  toolPrefix: string;
 }): LoopbackManager {
+  const prefix = opts.toolPrefix;
   const autoCloseMs = opts.autoCloseMs ?? 10 * 60_000;
   let loopback: Server | null = null;
   let loopbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,8 +74,8 @@ export function createLoopbackManager(opts: {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
           matches
-            ? '<h2>Код получен ✓</h2><p>Вернись в чат и вызови gsc_oauth_finish (код подхватится автоматически).</p>'
-            : '<h2>Код не принят</h2><p>Этот редирект не относится к текущей авторизации — повтори gsc_oauth_start и используй свежую ссылку.</p>',
+            ? `<h2>Код получен ✓</h2><p>Вернись в чат и вызови ${prefix}_oauth_finish (код подхватится автоматически).</p>`
+            : `<h2>Код не принят</h2><p>Этот редирект не относится к текущей авторизации — повтори ${prefix}_oauth_start и используй свежую ссылку.</p>`,
         );
       });
       srv.once('error', () => {
