@@ -128,6 +128,15 @@ Units and dates: GA4 returns `bounceRate`/`engagementRate` as a **0..1 fraction*
 
 ## Quick start
 
+### Option 0 — one click for Claude Desktop (.mcpb)
+
+The simplest path, nothing to install by hand: grab the `.mcpb` you need from the [latest release](https://github.com/antohins/seo-tools-mcp/releases/latest) and **double-click it** — Claude Desktop installs the server and asks for the keys in its own dialog.
+
+- API-key servers (`xmlstock`, `xmlriver`, `wordstat`, `aparser`) ask for the keys right in the installer.
+- OAuth servers (`gsc`, `ga4`, `ywm`, `metrika`) ask for nothing: you authorize in chat (`<server>_oauth_start` → `<server>_oauth_finish`).
+
+Bundles are self-contained (~0.2 MB, dependencies inlined); Node.js 20+ is only needed for the npx route. Build them yourself with `pnpm build:mcpb`.
+
 ### Option A — via npx (no cloning)
 
 Each server is a self-contained npm package `seo-tools-mcp-<server>`; add it with one command:

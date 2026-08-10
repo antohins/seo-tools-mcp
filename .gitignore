@@ -12,3 +12,7 @@ secrets/
 BACKPORT-FROM-PANEL.md
 # npm-тарболы от pnpm pack
 *.tgz
+
+# MCPB-бандлы (собираются скриптом, публикуются в GitHub Release)
+dist-mcpb/
+.mcpb-stage/

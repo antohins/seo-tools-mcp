@@ -22,7 +22,8 @@
     "format": "biome check --write",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:live": "LIVE=1 vitest run tests/live"
+    "test:live": "LIVE=1 vitest run tests/live",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.4",
