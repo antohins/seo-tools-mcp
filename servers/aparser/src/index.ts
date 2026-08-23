@@ -19,7 +19,15 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, resolveRegionId, safeHandler } from '@seo-tools/shared';
+import {
+  accountParam,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  resolveRegionId,
+  safeHandler,
+  withToolDefaults,
+} from '@seo-tools/shared';
 import { z } from 'zod';
 import {
   aparserCall,
@@ -45,7 +53,8 @@ import {
 
 loadSharedEnv();
 
-const server = new McpServer({ name: 'aparser', version: '1.7.0' });
+// withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
+const server = withToolDefaults(new McpServer({ name: 'aparser', version: '1.7.0' }));
 
 registerAuthTools(
   server,

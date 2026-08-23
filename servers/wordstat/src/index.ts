@@ -13,7 +13,15 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, resolveRegionIds, safeHandler } from '@seo-tools/shared';
+import {
+  accountParam,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  resolveRegionIds,
+  safeHandler,
+  withToolDefaults,
+} from '@seo-tools/shared';
 import { z } from 'zod';
 import { flattenRegions, type RegionNode } from './regions.js';
 import { createRegionNamesCache, exactForm, hasOperators, resolveDevices, toNum, validateDynamicsDates, wordstatPost } from './wordstat.js';
@@ -45,7 +53,8 @@ interface TopResponse {
   associations?: Array<{ phrase: string; count: string }>;
 }
 
-const server = new McpServer({ name: 'wordstat', version: '1.7.0' });
+// withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
+const server = withToolDefaults(new McpServer({ name: 'wordstat', version: '1.7.0' }));
 
 registerAuthTools(
   server,

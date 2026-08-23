@@ -110,6 +110,8 @@ export function registerAuthTools(server: McpServer, prefix: string, creds: Cred
         `Сохранить ключи ${prefix} в ${ENV_FILE} (права 600) и применить сразу, без перезапуска сервера. ` +
         'Передавать только обновляемые поля. account — сохранить в именованный профиль (мультиаккаунт). ' +
         'Значения даёт пользователь; в ответе они маскируются.',
+      // НЕ read-only: сохраняет ключи в конфиг-файл
+      annotations: { readOnlyHint: false },
       inputSchema: shape,
     },
     safeHandler(async (args: Record<string, string | undefined>) => {

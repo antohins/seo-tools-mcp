@@ -60,6 +60,7 @@ import {
   registerAuthTools,
   requireEnv,
   safeHandler,
+  withToolDefaults,
 } from '@seo-tools/shared';
 import { z } from 'zod';
 import { ADDITIONAL_PARAMS } from './additional.js';
@@ -81,7 +82,8 @@ const aggregators = (): string[] =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-const server = new McpServer({ name: 'xmlriver', version: '1.7.0' });
+// withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
+const server = withToolDefaults(new McpServer({ name: 'xmlriver', version: '1.7.0' }));
 
 registerAuthTools(
   server,

@@ -12,7 +12,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, safeHandler } from '@seo-tools/shared';
+import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, safeHandler, withToolDefaults } from '@seo-tools/shared';
 import { createGoogleAuth, registerGoogleOauthTools } from '@seo-tools/shared/google';
 import { z } from 'zod';
 import { buildQueryBody, forbidden403Hint, type GscRow, mapKeysToDimensions, resolveSite, validateDates } from './logic.js';
@@ -77,7 +77,8 @@ async function queryAll(siteUrl: string, body: Record<string, unknown>, limit: n
   return { rows, truncated, truncatedBy, firstIncompleteDate };
 }
 
-const server = new McpServer({ name: 'gsc', version: '1.7.0' });
+// withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
+const server = withToolDefaults(new McpServer({ name: 'gsc', version: '1.7.0' }));
 
 registerAuthTools(
   server,

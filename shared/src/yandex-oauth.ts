@@ -220,6 +220,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
         `Требуется OAuth-приложение (oauth.yandex.ru/client/new, Redirect URI: https://oauth.yandex.ru/verification_code, scope: ${scopesHint}). ` +
         'clientId/clientSecret сохраняются для дальнейшего авто-обновления токена (приложение ОБЩЕЕ для всех аккаунтов). ' +
         'account — имя профиля для мультиаккаунта: пользователь авторизуется под ДРУГИМ Яндекс-аккаунтом, токен сохранится отдельно.',
+      // НЕ read-only: сохраняет client id/secret приложения
+      annotations: { readOnlyHint: false },
       inputSchema: {
         clientId: z.string().optional().describe('ClientID приложения (если не сохранён ранее как YANDEX_CLIENT_ID)'),
         clientSecret: z.string().optional().describe('Client secret приложения (для обмена кода и refresh)'),
@@ -261,6 +263,8 @@ export function registerYandexOauthTools(server: McpServer, prefix: string, scop
       description:
         'Шаг 2 авторизации Яндекса: обменивает код подтверждения на access+refresh токены и сохраняет их ' +
         '(с суффиксом профиля, если передан account). После этого токен обновляется автоматически при протухании.',
+      // НЕ read-only: сохраняет access/refresh-токены
+      annotations: { readOnlyHint: false },
       inputSchema: {
         code: z.string().describe('Код подтверждения со страницы Яндекса'),
         account: z.string().optional().describe('Имя аккаунта-профиля — то же, что в oauth_start'),

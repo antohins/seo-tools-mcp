@@ -9,7 +9,15 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { accountParam, jsonResult, loadSharedEnv, registerAuthTools, registerYandexOauthTools, safeHandler } from '@seo-tools/shared';
+import {
+  accountParam,
+  jsonResult,
+  loadSharedEnv,
+  registerAuthTools,
+  registerYandexOauthTools,
+  safeHandler,
+  withToolDefaults,
+} from '@seo-tools/shared';
 import { z } from 'zod';
 import { landingFilter } from './filters.js';
 import { mapReportRows, shortKey } from './report.js';
@@ -88,7 +96,8 @@ const date2Param = z
   .optional()
   .describe('YYYY-MM-DD (по умолчанию сегодня; «сегодня» — по МСК)');
 
-const server = new McpServer({ name: 'metrika', version: '1.7.0' });
+// withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
+const server = withToolDefaults(new McpServer({ name: 'metrika', version: '1.7.0' }));
 
 registerAuthTools(
   server,

@@ -70,6 +70,8 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
         'Требуется OAuth client типа Desktop app (client ID + secret из console.cloud.google.com); переданные clientId/clientSecret сохраняются ' +
         '(при account — в профиль GOOGLE_CLIENT_*__<account>, базовые значения не перезаписываются). ' +
         `После согласия Google отправит браузер на localhost — код подхватится автоматически, затем вызвать ${prefix}_oauth_finish.`,
+      // НЕ read-only: сохраняет client id/secret
+      annotations: { readOnlyHint: false },
       inputSchema: {
         clientId: z.string().optional().describe('OAuth client ID (если не сохранён как GOOGLE_CLIENT_ID)'),
         clientSecret: z.string().optional().describe('OAuth client secret'),
@@ -156,6 +158,8 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
       description:
         'Шаг 2 OAuth-авторизации Google: обменивает код на access+refresh токены и сохраняет их. ' +
         `Без аргументов берёт код, пойманный localhost-приёмником после ${prefix}_oauth_start; можно передать код вручную.`,
+      // НЕ read-only: сохраняет refresh-токен
+      annotations: { readOnlyHint: false },
       inputSchema: {
         code: z.string().optional().describe('Код из редиректа (обычно не нужен — подхватывается автоматически)'),
         account: accountParam,
@@ -217,6 +221,8 @@ export function registerGoogleOauthTools(server: McpServer, opts: GoogleOauthToo
       description:
         `Сохранить содержимое JSON-ключа сервис-аккаунта в конфиг-директорию (права 600) и прописать ${opts.saJsonEnv}. ` +
         `Альтернатива, если файл уже лежит на диске: ${prefix}_set_credentials с путём в ${opts.saJsonEnv}.`,
+      // НЕ read-only: пишет файл ключа
+      annotations: { readOnlyHint: false },
       inputSchema: {
         json: z.string().describe('Полное содержимое скачанного JSON-ключа сервис-аккаунта'),
         account: accountParam,
