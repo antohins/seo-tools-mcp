@@ -5,11 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+# Токену workflow нужен только доступ на чтение репозитория: сборка и тесты
+# ничего не публикуют. Без явного блока права остаются дефолтными (шире нужного).
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -28,3 +35,28 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm test
         # лайв-смоук (tests/live) пропускается без LIVE=1 и кредов — в CI не гоняется
+
+      # Версия дублируется в 33 местах (по 4 на каждый сервер + plugin.json).
+      # Расхождение уже приводило к тому, что реестр MCP не получил выпущенную
+      # версию, — гейт ловит это до релиза. Точный список печатает сам скрипт.
+      - name: Проверка синхронности версий
+        run: pnpm version:check
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Известные уязвимости в зависимостях, которые уезжают внутрь .mcpb-бандлов.
+      # Не блокирует сборку: отчёт информационный, решение — за мейнтейнером.
+      - name: Аудит зависимостей
+        run: pnpm audit --audit-level moderate || true

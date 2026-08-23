@@ -22,7 +22,7 @@ Self-contained package — the shared code is bundled in, nothing else to instal
 }
 ```
 
-Then set credentials right in the chat: `xmlstock_auth_status` → `xmlstock_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all six servers, multi-account and configuration:
+Then set credentials right in the chat: `xmlstock_auth_status` → `xmlstock_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all eight servers, multi-account and configuration:
 **https://github.com/antohins/seo-tools-mcp**
 
 ## Tools

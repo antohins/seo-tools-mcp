@@ -410,7 +410,7 @@ node servers/xmlstock/dist/index.js   # ручной запуск (stdio)
 ```bash
 npm login
 pnpm -r build                 # shared (tsc) → серверы (tsup-бандл)
-pnpm -r publish --access public   # публикует 5 серверов; private-пакеты (shared, корень) пропускаются
+pnpm -r publish --access public   # публикует 8 серверов; private-пакеты (shared, корень) пропускаются
 ```
 
 `pnpm publish` сам подставляет реальные версии вместо `workspace:*` и не даст опубликовать при грязном рабочем дереве. Бамп версии — `pnpm -r exec npm version patch` (или вручную в каждом `package.json`).

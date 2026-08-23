@@ -23,7 +23,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:live": "LIVE=1 vitest run tests/live",
-    "build:mcpb": "node scripts/build-mcpb.mjs"
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "version:check": "node scripts/sync-version.mjs",
+    "version:sync": "node scripts/sync-version.mjs --write"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.4",

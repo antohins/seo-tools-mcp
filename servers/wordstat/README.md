@@ -1,6 +1,6 @@
 # seo-tools-mcp-wordstat
 
-MCP server for **Yandex Wordstat keyword frequencies (official API v2)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (six SEO servers).
+MCP server for **Yandex Wordstat keyword frequencies (official API v2)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (eight SEO servers).
 
 ## Install
 
@@ -22,7 +22,7 @@ Self-contained package — the shared code is bundled in, nothing else to instal
 }
 ```
 
-Then set credentials right in the chat: `wordstat_auth_status` → `wordstat_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all six servers, multi-account and configuration:
+Then set credentials right in the chat: `wordstat_auth_status` → `wordstat_set_credentials` (the agent walks you through what's needed and where to get it). Full docs, all eight servers, multi-account and configuration:
 **https://github.com/antohins/seo-tools-mcp**
 
 ## Tools

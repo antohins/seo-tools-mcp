@@ -1,13 +1,28 @@
 version: 2
 updates:
+  # ВАЖНО: directories (не directory) — иначе обновляется только корневой package.json,
+  # а рантайм-зависимости серверов (@modelcontextprotocol/sdk, zod, google-auth-library)
+  # остаются замороженными. Именно они вшиваются внутрь .mcpb-бандлов пользователям.
   - package-ecosystem: "npm"
-    directory: "/"
+    directories:
+      - "/"
+      - "/shared"
+      - "/servers/*"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    # directories выше разворачивается в 10 каталогов, а группа даёт ПО PR НА КАЖДЫЙ.
+    # Лимит применяется ко всей записи updates, поэтому при значении 5 хвостовые
+    # каталоги (как раз servers/*, ради которых правка и делалась) просто не дошли бы
+    # до обновления, пока висят первые пять. Все PR правят общий pnpm-lock.yaml —
+    # dependabot ребейзит их сам, но мержить лучше по одному.
+    open-pull-requests-limit: 12
     groups:
       npm-dependencies:
         patterns: ["*"]
+    # Свежие версии пакетов иногда оказываются скомпрометированными; выдержка
+    # снижает риск подтянуть такую в бандл раньше, чем её отзовут.
+    cooldown:
+      default-days: 3
     # Мажорные обновления этих пакетов ломают сборку и требуют ручной миграции:
     # typescript 7 (нативный порт, не резолвит node-типы), zod 4 (несовместим с
     # текущим MCP SDK), @types/node привязан к рантайму Node 22. Минор/патч разрешены.
@@ -18,7 +33,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3

@@ -135,7 +135,7 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
   `dist/index.js`** (ESM, target node20), рантайм-зависимости из `dependencies` остаются external —
   npm-пакет самодостаточен.
 - Публикация (мейнтейнеры): каждый сервер — отдельный публичный npm-пакет `seo-tools-mcp-<name>`,
-  `shared` приватный и в npm не уходит. Версии всех серверов держать синхронно (сейчас 1.3.0).
+  `shared` приватный и в npm не уходит. Версии всех серверов держать синхронно (см. корневой package.json — единый источник правды).
   ```bash
   pnpm -r build
   pnpm -r publish --access public   # private-пакеты пропускаются
