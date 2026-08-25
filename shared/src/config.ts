@@ -55,17 +55,29 @@ export function readConfigFile(force = false): Map<string, string> {
 }
 
 /**
+ * Неподставленный шаблон хоста (`${user_config.X}`, `${env:X}` и подобные). Хосты вроде
+ * маркетплейса плагинов Claude Code передают ключи через такие плейсхолдеры; если хост
+ * старый или поле не заполнено, до сервера доезжает САМА СТРОКА шаблона. Она непустая,
+ * поэтому без этой проверки прошла бы за настоящий ключ: auth_status отрапортовал бы
+ * ready, а провайдер ответил бы невнятной ошибкой авторизации.
+ */
+const PLACEHOLDER_RE = /^\$\{[^}]*\}$/;
+
+/** Значение окружения, если оно осмысленное (не пустое и не неподставленный шаблон). */
+const usable = (value: string | undefined): string | undefined => (value && !PLACEHOLDER_RE.test(value.trim()) ? value : undefined);
+
+/**
  * Значение конфига: реальное окружение процесса (initialEnv) > env-файл (свежий).
  * Единственная точка чтения — НЕ читать process.env напрямую в серверах.
  */
 export function getConfig(name: string, account?: string): string | undefined {
   const key = envKey(name, account);
-  return initialEnv[key] || readConfigFile().get(key) || undefined;
+  return usable(initialEnv[key]) || readConfigFile().get(key) || undefined;
 }
 
 /** true, если ключ перекрыт реальным окружением процесса (файл его не изменит). */
 export function hasRealEnvOverride(name: string, account?: string): boolean {
-  return Boolean(initialEnv[envKey(name, account)]);
+  return Boolean(usable(initialEnv[envKey(name, account)]));
 }
 
 const sleepSync = (ms: number) => {
@@ -236,7 +248,7 @@ export function accountsFor(name: string): string[] {
   const prefix = `${name}__`;
   const found = new Set<string>();
   for (const k of Object.keys(initialEnv)) {
-    if (k.startsWith(prefix) && initialEnv[k]) found.add(k.slice(prefix.length));
+    if (k.startsWith(prefix) && usable(initialEnv[k])) found.add(k.slice(prefix.length));
   }
   for (const k of readConfigFile().keys()) {
     if (k.startsWith(prefix) && readConfigFile().get(k)) found.add(k.slice(prefix.length));

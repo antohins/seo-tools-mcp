@@ -64,6 +64,31 @@ All notable changes to this project are documented here. The format is based on
   "MCP servers (0)" — a lie in the most visible place of the plugin catalogue.
 
 ### Fixed
+- **ga4**: `ga4_annotations` validated its dates with the reporting validator, which accepts GA4
+  keywords like `28daysAgo`. The Admin API filter behind it takes literal `YYYY-MM-DD` only, so a
+  keyword sailed through and came back as a bare 400 `INVALID_ARGUMENT`. It is now rejected locally
+  with an explanation of why this particular parameter is stricter than the rest.
+- **ga4**: `ga4_funnel` claimed `truncated: false` unconditionally, because `FunnelSubReport`
+  carries no `rowCount` and the shared parser assumes one. Measured on a live property what `limit`
+  actually does: without a breakdown it cuts rows directly (limit=1 → 1 row of 2), with a breakdown
+  it applies inside each step and the row count stops meaning anything (limit=1 → 6 rows, limit=4
+  → 12, limit=1000 → also 12). So the answer is now `true`/`false` where it is knowable and `null`
+  where it is not — a first attempt that inferred truncation from the row count reported a cut at
+  limit=4 where nothing had been cut.
+- **shared**: an unsubstituted host placeholder (`${user_config.KEY}`) is no longer accepted as a
+  credential. Claude Code does substitute these — verified by installing a probe plugin and dumping
+  the environment the server actually received — but an older host, or a field left blank, would
+  deliver the literal template string, and being non-empty it would have passed for a real key:
+  `auth_status` would report `ready` and the provider would fail later with an unrelated-looking
+  auth error. Placeholder-shaped values now fall through to the config file, as an empty one does.
+- **tooling**: `pnpm plugins:sync` removed stale files but left their now-empty directories behind,
+  and `plugins:check` only walked files — so it reported clean while the test suite, which reads
+  directory entries, failed on ENOENT. Both directions are covered now, and the deletion pass runs
+  after the write pass: computing it beforehand deleted a file the same run had just created.
+- **docs**: the publishing section of both READMEs still prescribed `pnpm -r exec npm version
+  patch`, which now guarantees a `version:check` failure in CI — it updates the server packages and
+  leaves the other 34 places behind. Replaced with the root-package.json + `pnpm version:sync` flow
+  that AGENTS.md already documented.
 - A pnpm 11 upgrade had left `pnpm-workspace.yaml` holding an unanswered `allowBuilds:
   esbuild: set this to true or false` placeholder, which made **every** `pnpm` command in the repo
   fail with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`. Answered it, and pinned the pnpm version

@@ -27,6 +27,7 @@ import {
   FUNNEL_BREAKDOWN_TOTAL,
   flattenAccountSummaries,
   forbidden403Hint,
+  funnelTruncation,
   type Ga4FilterInput,
   type Ga4FunnelStepInput,
   type Ga4MetricFilterInput,
@@ -40,7 +41,7 @@ import {
   parsePropertyQuota,
   parseReport,
   resolveProperty,
-  validateDateRange,
+  validateAbsoluteDateRange,
 } from './logic.js';
 
 loadSharedEnv();
@@ -710,6 +711,7 @@ server.registerTool(
     // funnelTable — обычный отчёт по форме (заголовки + строки), но БЕЗ блока metadata
     const table = parseReport(data?.funnelTable, { withMetadata: false });
     const { rows, hasTotals } = markFunnelTotals(table.rows, args.breakdownDimension);
+    const truncated = funnelTruncation(rows.length, args.limit, Boolean(args.breakdownDimension));
     const quota = parsePropertyQuota(data);
     return jsonResult({
       property,
@@ -719,6 +721,15 @@ server.registerTool(
       steps: args.steps.map((s: { name: string }) => s.name),
       ...table,
       rows,
+      truncated,
+      ...(truncated === true ? { limitNote: `Строк ровно limit=${args.limit} — хвост обрезан. Увеличь limit.` } : {}),
+      ...(truncated === null
+        ? {
+            limitNote:
+              'truncated=null: полноту определить нельзя. API воронок не возвращает rowCount, а с разбивкой limit ' +
+              `действует внутри шага — число строк про обрезку ничего не говорит. Нужна уверенность — повтори с бо́льшим limit (сейчас ${args.limit}) и сравни.`,
+          }
+        : {}),
       ...(hasTotals
         ? {
             note:
@@ -741,7 +752,10 @@ server.registerTool(
       'Аннотация бывает на одну дату (date) или на период (date + endDate).',
     inputSchema: {
       propertyId: z.string().optional().describe('Числовой id свойства (по умолчанию GA4_PROPERTY_ID)'),
-      startDate: z.string().optional().describe('Оставить аннотации, пересекающие период (YYYY-MM-DD; вместе с endDate)'),
+      startDate: z
+        .string()
+        .optional()
+        .describe('Оставить аннотации, пересекающие период. Строго YYYY-MM-DD: ключевые слова GA4 здесь НЕ работают (фильтр Admin API)'),
       endDate: z.string().optional().describe('Конец периода (YYYY-MM-DD)'),
       limit: z.number().int().min(1).max(200).default(100).describe('Сколько аннотаций вернуть'),
       account: accountParam,
@@ -754,7 +768,7 @@ server.registerTool(
     }
     const qs = new URLSearchParams({ pageSize: String(Math.min(args.limit, 200)) });
     if (args.startDate && args.endDate) {
-      validateDateRange(args.startDate, args.endDate);
+      validateAbsoluteDateRange(args.startDate, args.endDate);
       // Серверный фильтр Admin API: аннотация пересекается с периодом. Хвост «= true»
       // обязателен — это предикат, а не вызов-условие: без него API отвечает 400
       // INVALID_ARGUMENT без единого намёка на причину.

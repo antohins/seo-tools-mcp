@@ -446,10 +446,12 @@ Each server is published as a separate package `seo-tools-mcp-<server>`; `shared
 ```bash
 npm login
 pnpm -r build                 # shared (tsc) → servers (tsup bundle)
-pnpm -r publish --access public   # publishes the 5 servers; private packages (shared, root) are skipped
+pnpm -r publish --access public   # publishes the 8 servers; private packages (shared, root) are skipped
 ```
 
-`pnpm publish` substitutes real versions for `workspace:*` and refuses to publish from a dirty tree. Bump versions with `pnpm -r exec npm version patch` (or by hand in each `package.json`).
+`pnpm publish` substitutes real versions for `workspace:*` and refuses to publish from a dirty tree.
+
+Bump the version **in the root `package.json` only**, then run `pnpm version:sync` — it propagates the value to all 42 places (each server's `package.json` and `server.json`, the literal in `new McpServer({ version })`, and the plugin manifests). `pnpm -r exec npm version patch` will not do: it touches the server packages only, leaves the rest behind, and `pnpm version:check` then fails in CI. To check without writing, run `pnpm version:check`.
 
 ## Contributing
 

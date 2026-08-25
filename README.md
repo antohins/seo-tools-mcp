@@ -449,7 +449,9 @@ pnpm -r build                 # shared (tsc) → серверы (tsup-бандл
 pnpm -r publish --access public   # публикует 8 серверов; private-пакеты (shared, корень) пропускаются
 ```
 
-`pnpm publish` сам подставляет реальные версии вместо `workspace:*` и не даст опубликовать при грязном рабочем дереве. Бамп версии — `pnpm -r exec npm version patch` (или вручную в каждом `package.json`).
+`pnpm publish` сам подставляет реальные версии вместо `workspace:*` и не даст опубликовать при грязном рабочем дереве.
+
+Бамп версии — **только через корневой `package.json`**: правишь версию там и запускаешь `pnpm version:sync`, который разносит её по всем 42 местам (`package.json` и `server.json` каждого сервера, литерал в `new McpServer({ version })`, манифесты плагинов). `pnpm -r exec npm version patch` для этого НЕ годится: он обновит только пакеты серверов, остальное останется на старой версии, и `pnpm version:check` в CI упадёт. Проверить без записи — `pnpm version:check`.
 
 ## Контрибьютинг
 

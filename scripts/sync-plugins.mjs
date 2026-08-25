@@ -227,19 +227,30 @@ putJson('.claude-plugin/marketplace.json', {
   })),
 });
 
-/** Всё, что реально лежит в plugins/ — чтобы поймать осиротевшие файлы. */
+/** Всё, что реально лежит в plugins/ — чтобы поймать осиротевшие файлы и пустые каталоги. */
 const onDisk = [];
+const emptyDirs = [];
+/** Обход поддерева; возвращает true, если внутри есть хоть один файл. */
 const walk = (abs) => {
-  if (!existsSync(abs)) return;
+  if (!existsSync(abs)) return false;
+  let hasFiles = false;
   for (const entry of readdirSync(abs)) {
     const full = join(abs, entry);
-    if (statSync(full).isDirectory()) walk(full);
-    else onDisk.push(relative(ROOT, full));
+    if (statSync(full).isDirectory()) hasFiles = walk(full) || hasFiles;
+    else {
+      onDisk.push(relative(ROOT, full));
+      hasFiles = true;
+    }
   }
+  // Каталог без файлов — след прошлого --write: удалённый навык оставлял свою папку.
+  // Проверка по одним файлам его не видела и рапортовала «синхронно», а тесты читают
+  // каталоги через readdirSync и падали на ENOENT.
+  if (!hasFiles) emptyDirs.push(relative(ROOT, abs));
+  return hasFiles;
 };
 walk(join(ROOT, 'plugins'));
 
-const stale = onDisk.filter((p) => !expected.has(p)).sort();
+const stale = [...onDisk.filter((p) => !expected.has(p)), ...emptyDirs].sort();
 const drift = [];
 
 for (const [path, content] of expected) {
@@ -254,11 +265,24 @@ for (const [path, content] of expected) {
 }
 
 if (WRITE) {
-  for (const path of stale) rmSync(join(ROOT, path));
-  const touched = drift.length + stale.length;
+  // Уборка ТОЛЬКО после записи и по свежему обходу. Скан до записи считает пустым
+  // каталог, в который эта же запись сейчас положит файл, — и уборка снесла бы его.
+  const rescan = () => {
+    onDisk.length = 0;
+    emptyDirs.length = 0;
+    walk(join(ROOT, 'plugins'));
+  };
+  rescan();
+  const removedFiles = onDisk.filter((p) => !expected.has(p));
+  for (const path of removedFiles) rmSync(join(ROOT, path), { force: true });
+  // удаление файлов могло опустошить их каталоги — второй проход добирает уже пустые
+  rescan();
+  const removedDirs = [...emptyDirs];
+  for (const path of removedDirs) rmSync(join(ROOT, path), { recursive: true, force: true });
+  const touched = drift.length + removedFiles.length + removedDirs.length;
   console.log(
     touched
-      ? `Перегенерировано под ${VERSION}: файлов ${drift.length}, удалено лишних ${stale.length}.`
+      ? `Перегенерировано под ${VERSION}: файлов ${drift.length}, удалено лишних ${removedFiles.length + removedDirs.length}.`
       : `Плагины уже синхронны: ${expected.size} файлов, плагинов ${SERVERS.length + 1}.`,
   );
   process.exit(0);
@@ -268,7 +292,7 @@ if (drift.length || stale.length) {
   console.error(
     `Каталог plugins/ разошёлся со спекой (scripts/sync-plugins.mjs):\n  ${[
       ...drift,
-      ...stale.map((p) => `лишний файл: ${p}`),
+      ...stale.map((p) => `${emptyDirs.includes(p) ? 'пустой каталог' : 'лишний файл'}: ${p}`),
     ].join('\n  ')}\n\nПравить надо спеку и skills/<name>/SKILL.md, копии перегенерировать: pnpm plugins:sync`,
   );
   process.exit(1);

@@ -648,3 +648,18 @@ describe('markFunnelTotals', () => {
     expect(out.rows[0].deviceCategory).toBe('mobile');
   });
 });
+
+describe('funnelTruncation', () => {
+  it('без разбивки: упор в limit = обрезано', () => {
+    // проверено живьём: limit=1 отдаёт 1 строку из 2, limit=3 — обе
+    expect(logic.funnelTruncation(1, 1, false)).toBe(true);
+    expect(logic.funnelTruncation(2, 3, false)).toBe(false);
+  });
+
+  it('с разбивкой — null, а не догадка', () => {
+    // limit действует внутри шага: при limit=4 приходило 12 строк, и это был полный набор;
+    // и false, и true тут были бы утверждением, которого API не даёт
+    expect(logic.funnelTruncation(12, 4, true)).toBeNull();
+    expect(logic.funnelTruncation(12, 1000, true)).toBeNull();
+  });
+});

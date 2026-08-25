@@ -37,6 +37,26 @@ export function validateDate(value: string, field: string): void {
 }
 
 /**
+ * Строгая абсолютная дата (YYYY-MM-DD) — БЕЗ ключевых слов GA4. Нужна там, где границы
+ * уходят не в Data API, а в фильтр Admin API: он ключевые слова не понимает и отвечает
+ * голым 400 INVALID_ARGUMENT, из которого причину не вычитать.
+ */
+export function validateAbsoluteDateRange(startDate: string, endDate: string): void {
+  for (const [value, field] of [
+    [startDate, 'startDate'],
+    [endDate, 'endDate'],
+  ] as const) {
+    if (!DATE_RE.test(value)) {
+      throw new Error(
+        `Некорректная дата ${field}="${value}": здесь нужна абсолютная дата YYYY-MM-DD. ` +
+          'Ключевые слова GA4 (today, yesterday, NdaysAgo) понимает только Data API, а этот фильтр — Admin API.',
+      );
+    }
+  }
+  if (startDate > endDate) throw new Error(`startDate (${startDate}) позже endDate (${endDate}) — поменяй границы местами.`);
+}
+
+/**
  * Проверка порядка дат. Сравниваем только когда ОБЕ границы абсолютные (YYYY-MM-DD):
  * ключевые слова резолвит сам GA4 в таймзоне свойства, и локально их сравнивать некорректно.
  */
@@ -684,4 +704,16 @@ export function markFunnelTotals(rows: Ga4ReportRow[], breakdownDimension?: stri
     return { ...row, [breakdownDimension]: FUNNEL_BREAKDOWN_TOTAL };
   });
   return { rows: out, hasTotals };
+}
+
+/**
+ * Обрезана ли таблица воронки. API воронок НЕ возвращает rowCount, поэтому
+ * truncated:false из parseReport здесь необоснован. Что показало живое свойство:
+ *  • без разбивки limit режет строки напрямую (limit=1 → 1 строка из 2, limit=3 → 2);
+ *  • с разбивкой limit действует ВНУТРИ шага, и связь с числом строк теряется
+ *    (limit=1 → 6 строк, limit=4 → 12, limit=1000 → тоже 12).
+ * Отсюда null во втором случае: «неизвестно» честнее и выдуманного false, и ложного true.
+ */
+export function funnelTruncation(rowCount: number, limit: number, hasBreakdown: boolean): boolean | null {
+  return hasBreakdown ? null : rowCount >= limit;
 }
