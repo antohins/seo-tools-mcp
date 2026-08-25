@@ -19,7 +19,7 @@ Eight **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, G
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API key |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (all account properties) / service account |
-| `ga4` | `ga4_list_properties`, `ga4_metadata`, `ga4_check_compatibility`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (all account properties) / service account |
+| `ga4` | `ga4_list_properties`, `ga4_metadata`, `ga4_check_compatibility`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime`, `ga4_funnel`, `ga4_annotations`, `ga4_property_details` | OAuth (all account properties) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (auto-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (auto-refresh) |
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (API URL + password) |
@@ -81,6 +81,9 @@ Search Analytics dates are in Pacific Time (not MSK); history is ~16 months; fin
 - `ga4_top_pages` — top pages by `pagePath`, landing page or title; `organicOnly` and `pathContains` filters
 - `ga4_events` — events by `eventName`; `keyEventsOnly` for key events (former conversions)
 - `ga4_realtime` — realtime report (last 30 minutes)
+- `ga4_funnel` — funnel (`runFunnelReport`): how many reached each step and where they dropped off; a step is an event and/or dimension conditions, with an optional breakdown. Steps follow the Exploration API schema (`pagePath` is unavailable there), the quota bucket is separate and a call costs more than a plain report
+- `ga4_annotations` — property annotations: notes pinned to dates, including ones GA4 generated itself (`systemGenerated`) — often the explanation for an unexplained jump in a trend
+- `ga4_property_details` — property card: reporting time zone, currency, service level (STANDARD/360) and data streams with their `G-XXXXXXX` Measurement IDs
 
 Units and dates: GA4 returns `bounceRate`/`engagementRate` as a **0..1 fraction**, not a percent; dates resolve in the **property's** timezone — pass `YYYY-MM-DD` or GA4 keywords (`today`, `yesterday`, `28daysAgo`), and the applied timezone comes back in the response. Responses carry `totalRows`/`truncated`, and `thresholded: true` means part of the data is hidden behind GA4's privacy threshold.
 
@@ -153,7 +156,7 @@ claude plugin install gsc@seo-tools-mcp
 claude plugin install ga4@seo-tools-mcp
 ```
 
-Available: `xmlstock`, `xmlriver`, `wordstat`, `gsc`, `ga4`, `ywm`, `metrika`, `aparser` — plus `seo-tools`, which installs all eight at once. The bundle is convenient but costs ~98 tools in every session: if you only work with Webmaster and Metrica, install those two plugins instead.
+Available: `xmlstock`, `xmlriver`, `wordstat`, `gsc`, `ga4`, `ywm`, `metrika`, `aparser` — plus `seo-tools`, which installs all eight at once. The bundle is convenient but costs ~100 tools in every session: if you only work with Webmaster and Metrica, install those two plugins instead.
 
 Keys can be passed up front (`--config KEY=VALUE`) or set later via `/plugin configure <plugin>@seo-tools-mcp`:
 

@@ -69,7 +69,7 @@
     {
       "name": "ga4",
       "source": "./plugins/ga4",
-      "description": "GA4 reports, traffic sources, landing pages, events and realtime. Read-only; run ga4_oauth_start after install to authorise.",
+      "description": "GA4 reports, traffic sources, landing pages, events, funnels, annotations and realtime. Read-only; run ga4_oauth_start after install to authorise.",
       "category": "analytics",
       "keywords": [
         "seo",
@@ -123,7 +123,7 @@
     {
       "name": "seo-tools",
       "source": "./plugins/seo-tools",
-      "description": "All eight servers at once: XMLStock, XMLRiver, Wordstat, Search Console, Analytics 4, Yandex.Webmaster, Yandex.Metrica and the A-Parser bridge. ~98 tools — prefer the single-server plugins unless you need the lot.",
+      "description": "All eight servers at once: XMLStock, XMLRiver, Wordstat, Search Console, Analytics 4, Yandex.Webmaster, Yandex.Metrica and the A-Parser bridge. ~100 tools — prefer the single-server plugins unless you need the lot.",
       "category": "seo",
       "keywords": [
         "seo",

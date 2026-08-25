@@ -7,6 +7,26 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **ga4**: `ga4_funnel` — funnel reports (`runFunnelReport`, v1alpha): how many users reached each
+  step and where they dropped off, with an optional breakdown dimension. Two traps that cost real
+  debugging time are handled rather than passed on. First, **funnel steps use the Exploration API
+  schema, not the reporting one** — `pagePath` is rejected with a 400 there, and `ga4_metadata`
+  does not apply; the description names the fields that do work. Second, with a breakdown GA4 adds
+  a per-step total row tagged `RESERVED_TOTAL` in the breakdown column, which reads as just another
+  dimension value and silently doubles any sum over a step; it is relabelled `(всего)` and the
+  response carries a note. Verified against a live property: 59116 → 38663 → 19262 users.
+- **ga4**: `ga4_annotations` — property annotations (Admin API v1alpha), including the ones GA4
+  generates itself. Usually the answer to "why did this metric jump on that date". The date filter
+  needs `is_annotation_in_range(...) = true`; without the `= true` tail the API returns a bare 400
+  `INVALID_ARGUMENT` with no hint — found live, since the docs example is easy to misread.
+- **ga4**: `ga4_property_details` — reporting time zone, currency, industry, service level
+  (STANDARD vs 360, which decides quotas and sampling) and the data streams with their
+  `G-XXXXXXX` Measurement IDs. The time zone alone explains most "the dates do not match" reports:
+  GA4 counts days in the property's zone, not UTC.
+- **ga4**: `includeQuota` on every reporting tool — how many Data API tokens the call consumed and
+  what is left for the hour and the day. Confirmed live that funnels bill to a **separate** bucket
+  and cost about 10 tokens against 1 for a plain report.
+
 - **Skills** (`skills/`, shipped inside the plugins): six procedural notes carrying the parts of
   this domain that tool descriptions cannot — snapping positions without burning the SERP balance,
   why Wordstat's broad frequency overstates traffic several times over, the three reasons GA4
@@ -26,7 +46,7 @@ All notable changes to this project are documented here. The format is based on
   into the `.mcpb` bundles — and that gap has bitten before: the first `.mcpb` attempt produced gsc
   and ga4 bundles that did not start at all. Asserts the handshake, the exact tool list per server
   (snapshotted, so a rename or a disappearance shows up in review), a non-empty `title` and
-  description on all 98 tools, and that `readOnlyHint` is false on exactly the 18 tools that write.
+  description on all 101 tools, and that `readOnlyHint` is false on exactly the 18 tools that write.
   No network: it points `SEO_TOOLS_MCP_ENV` at an empty temp file and calls only `*_auth_status`,
   which is local — so the run can neither read real credentials nor spend money on a paid API.
   Each assertion was verified to fail by breaking the corresponding thing on purpose.
@@ -35,7 +55,7 @@ All notable changes to this project are documented here. The format is based on
   one per server plus a `seo-tools` bundle — installable with
   `claude plugin marketplace add antohins/seo-tools-mcp` and
   `claude plugin install <name>@seo-tools-mcp`. One plugin pulls exactly one server, which is the
-  point: the bundle is ~98 tools in every session, and most work needs two or three sources.
+  point: the bundle is ~100 tools in every session, and most work needs two or three sources.
   Each plugin declares its keys as `userConfig`, so Claude Code asks for them in a dialog and puts
   the ones marked `sensitive` (API keys, OAuth secrets) into the OS keychain instead of a plaintext
   file — verified by installing all nine locally and confirming the secret never reaches

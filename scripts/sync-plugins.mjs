@@ -25,7 +25,7 @@ const AUTHOR = { name: 'antohins', url: 'https://github.com/antohins' };
 const HOME = 'https://github.com/antohins/seo-tools-mcp';
 const s = (title, description, opts = {}) => ({ type: 'string', title, description, ...opts });
 
-/** Один сервер = один плагин: ставится только нужное, а не 98 инструментов сразу. */
+/** Один сервер = один плагин: ставится только нужное, а не сотня инструментов сразу. */
 const SERVERS = [
   {
     id: 'xmlstock',
@@ -87,7 +87,7 @@ const SERVERS = [
     id: 'ga4',
     displayName: 'SEO Tools: Google Analytics 4',
     description:
-      'GA4 reports, traffic sources, landing pages, events and realtime. Read-only; run ga4_oauth_start after install to authorise.',
+      'GA4 reports, traffic sources, landing pages, events, funnels, annotations and realtime. Read-only; run ga4_oauth_start after install to authorise.',
     keywords: ['seo', 'google-analytics', 'ga4', 'analytics', 'reporting'],
     skills: ['ga4-reporting'],
     userConfig: {
@@ -149,7 +149,7 @@ const BUNDLE = {
   id: 'seo-tools',
   displayName: 'SEO Tools: everything',
   description:
-    'All eight servers at once: XMLStock, XMLRiver, Wordstat, Search Console, Analytics 4, Yandex.Webmaster, Yandex.Metrica and the A-Parser bridge. ~98 tools — prefer the single-server plugins unless you need the lot.',
+    'All eight servers at once: XMLStock, XMLRiver, Wordstat, Search Console, Analytics 4, Yandex.Webmaster, Yandex.Metrica and the A-Parser bridge. ~100 tools — prefer the single-server plugins unless you need the lot.',
   keywords: ['seo', 'serp', 'google', 'yandex', 'analytics', 'search-console', 'wordstat', 'a-parser'],
   // бандл получает все навыки: он и есть «всё сразу»
   skills: [...new Set(SERVERS.flatMap((srv) => srv.skills))].sort(),

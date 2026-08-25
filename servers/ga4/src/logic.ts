@@ -101,6 +101,8 @@ export interface ReportBodyArgs {
   metricFilters?: Ga4MetricFilterInput[];
   /** добавить итоги по метрикам (metricAggregations: TOTAL) */
   includeTotals?: boolean;
+  /** вернуть остаток квоты свойства (propertyQuota) */
+  returnPropertyQuota?: boolean;
 }
 
 /** Числовой фильтр по метрике (metricFilter). */
@@ -151,6 +153,7 @@ export function buildReportBody(args: ReportBodyArgs): Record<string, unknown> {
   if (args.offset) body.offset = args.offset;
   if (args.keepEmptyRows) body.keepEmptyRows = true;
   if (args.includeTotals) body.metricAggregations = ['TOTAL'];
+  if (args.returnPropertyQuota) body.returnPropertyQuota = true;
   const filter = buildDimensionFilter(args.filters);
   if (filter) body.dimensionFilter = filter;
   const mFilter = buildMetricFilter(args.metricFilters);
@@ -455,4 +458,230 @@ export function forbidden403Hint(property?: string): string {
     'Для сервис-аккаунта: его email добавлен в свойство GA4 (Администратор → Управление доступом к ресурсу, роль «Просмотр»)? ' +
     'Также убедись, что в проекте Google Cloud включены Google Analytics Data API и Google Analytics Admin API.'
   );
+}
+
+/** Шаг воронки: событие и/или условия по измерениям. */
+export interface Ga4FunnelStepInput {
+  name: string;
+  /** имя события GA4 (page_view, add_to_cart, purchase…) */
+  eventName?: string;
+  /** дополнительные условия по измерениям — объединяются с событием через AND */
+  filters?: Ga4FilterInput[];
+  /** true — шаг должен идти СРАЗУ после предыдущего, без событий между ними */
+  isDirectlyFollowedBy?: boolean;
+  /** ограничение по времени от предыдущего шага (минуты) */
+  withinMinutesFromPriorStep?: number;
+}
+
+/** Одно условие шага воронки → FunnelFilterExpression. */
+function funnelFieldExpression(f: Ga4FilterInput): Record<string, unknown> {
+  const expr = {
+    funnelFieldFilter: {
+      fieldName: f.dimension,
+      stringFilter: { matchType: f.matchType, value: f.value, caseSensitive: Boolean(f.caseSensitive) },
+    },
+  };
+  return f.not ? { notExpression: expr } : expr;
+}
+
+export interface FunnelBodyArgs {
+  startDate: string;
+  endDate: string;
+  steps: Ga4FunnelStepInput[];
+  /** false — закрытая воронка: учитываются только пользователи, вошедшие через ПЕРВЫЙ шаг */
+  openFunnel?: boolean;
+  /** измерение для разбивки таблицы воронки (например deviceCategory) */
+  breakdownDimension?: string;
+  breakdownLimit?: number;
+  limit: number;
+  /** фильтр по всему отчёту (не по шагу) */
+  filters?: Ga4FilterInput[];
+  returnPropertyQuota?: boolean;
+}
+
+/** Тело properties.runFunnelReport (Data API v1alpha). */
+export function buildFunnelBody(args: FunnelBodyArgs): Record<string, unknown> {
+  validateDateRange(args.startDate, args.endDate);
+  if (args.steps.length < 2) {
+    throw new Error(`Воронка требует минимум ДВА шага (передано: ${args.steps.length}) — иначе считать нечего.`);
+  }
+  const steps = args.steps.map((step, i) => {
+    const parts: Record<string, unknown>[] = [];
+    if (step.eventName) parts.push({ funnelEventFilter: { eventName: step.eventName } });
+    for (const f of step.filters ?? []) parts.push(funnelFieldExpression(f));
+    if (!parts.length) {
+      throw new Error(`Шаг ${i + 1} ("${step.name}") пустой: задай eventName и/или filters — иначе шаг совпадёт с чем угодно.`);
+    }
+    const out: Record<string, unknown> = {
+      name: step.name,
+      filterExpression: parts.length === 1 ? parts[0] : { andGroup: { expressions: parts } },
+    };
+    // оба ограничения бессмысленны на первом шаге: до него ничего не было
+    if (i > 0 && step.isDirectlyFollowedBy) out.isDirectlyFollowedBy = true;
+    if (i > 0 && step.withinMinutesFromPriorStep) {
+      out.withinDurationFromPriorStep = `${Math.round(step.withinMinutesFromPriorStep * 60)}s`;
+    }
+    return out;
+  });
+  const body: Record<string, unknown> = {
+    dateRanges: [{ startDate: args.startDate, endDate: args.endDate }],
+    // API-умолчание — ЗАКРЫТАЯ воронка (isOpenFunnel отсутствует ⇒ false)
+    funnel: { isOpenFunnel: Boolean(args.openFunnel), steps },
+    limit: args.limit,
+  };
+  if (args.breakdownDimension) {
+    body.funnelBreakdown = {
+      breakdownDimension: { name: args.breakdownDimension },
+      ...(args.breakdownLimit ? { limit: args.breakdownLimit } : {}),
+    };
+  }
+  const filter = buildDimensionFilter(args.filters);
+  if (filter) body.dimensionFilter = filter;
+  if (args.returnPropertyQuota) body.returnPropertyQuota = true;
+  return body;
+}
+
+export interface QuotaBucket {
+  consumed: number;
+  remaining: number;
+}
+
+/**
+ * propertyQuota ответа → плоские числа. Google отдаёт корзины объектами
+ * { consumed, remaining }; пустые не выдумываем — их отсутствие само по себе значимо
+ * (у стандартных свойств часть лимитов не применяется).
+ */
+export function parsePropertyQuota(data: any): Record<string, QuotaBucket> | undefined {
+  const raw = data?.propertyQuota;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, QuotaBucket> = {};
+  for (const [key, value] of Object.entries<any>(raw)) {
+    if (!value || typeof value !== 'object') continue;
+    if (value.consumed == null && value.remaining == null) continue;
+    out[key] = { consumed: Number(value.consumed ?? 0), remaining: Number(value.remaining ?? 0) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** google.type.Date ({year, month, day}) → YYYY-MM-DD. */
+function typeDate(d: any): string | null {
+  if (!d || d.year == null) return null;
+  const pad = (n: unknown) => String(Number(n ?? 1)).padStart(2, '0');
+  return `${Number(d.year)}-${pad(d.month)}-${pad(d.day)}`;
+}
+
+export interface Ga4Annotation {
+  title: string;
+  description?: string;
+  /** дата или начало периода */
+  date: string | null;
+  /** конец периода (только у аннотаций-диапазонов) */
+  endDate?: string | null;
+  color?: string;
+  /** true — аннотация создана самой GA4, а не пользователем */
+  systemGenerated: boolean;
+  id: string;
+}
+
+export interface ParsedAnnotations {
+  count: number;
+  annotations: Ga4Annotation[];
+  truncated: boolean;
+}
+
+/** Ответ properties.reportingDataAnnotations.list → плоский список с датами в ISO. */
+export function parseAnnotations(data: any, limit = 100): ParsedAnnotations {
+  const raw: any[] = Array.isArray(data?.reportingDataAnnotations) ? data.reportingDataAnnotations : [];
+  const annotations = raw.slice(0, limit).map((a) => {
+    const range = a?.annotationDateRange;
+    const out: Ga4Annotation = {
+      title: String(a?.title ?? ''),
+      // одиночная дата и диапазон — взаимоисключающие поля; сводим к одной паре date/endDate
+      date: typeDate(a?.annotationDate) ?? typeDate(range?.startDate),
+      systemGenerated: Boolean(a?.systemGenerated),
+      id:
+        String(a?.name ?? '')
+          .split('/')
+          .pop() ?? '',
+    };
+    if (a?.description) out.description = String(a.description);
+    if (range?.endDate) out.endDate = typeDate(range.endDate);
+    if (a?.color) out.color = String(a.color);
+    return out;
+  });
+  return { count: annotations.length, annotations, truncated: raw.length > limit || Boolean(data?.nextPageToken) };
+}
+
+export interface Ga4DataStream {
+  id: string;
+  displayName: string;
+  type: string;
+  /** G-XXXXXXX — только у веб-потоков; именно его часто путают с propertyId */
+  measurementId?: string;
+  defaultUri?: string;
+}
+
+export interface ParsedPropertyDetails {
+  propertyId: string;
+  displayName: string;
+  /** таймзона отчётов: даты GA4 считаются в ней, а не в UTC */
+  timeZone: string | null;
+  currency: string | null;
+  industry: string | null;
+  /** STANDARD или GOOGLE_ANALYTICS_360 — от него зависят квоты и сэмплирование */
+  serviceLevel: string | null;
+  createTime: string | null;
+  parentAccount: string | null;
+  dataStreams: Ga4DataStream[];
+}
+
+/** properties.get + dataStreams.list → одна плоская карточка свойства. */
+export function parsePropertyDetails(property: any, streams: any): ParsedPropertyDetails {
+  const raw: any[] = Array.isArray(streams?.dataStreams) ? streams.dataStreams : [];
+  return {
+    propertyId:
+      String(property?.name ?? '')
+        .split('/')
+        .pop() ?? '',
+    displayName: String(property?.displayName ?? ''),
+    timeZone: property?.timeZone ? String(property.timeZone) : null,
+    currency: property?.currencyCode ? String(property.currencyCode) : null,
+    industry: property?.industryCategory ? String(property.industryCategory) : null,
+    serviceLevel: property?.serviceLevel ? String(property.serviceLevel) : null,
+    createTime: property?.createTime ? String(property.createTime) : null,
+    parentAccount: property?.parent ? String(property.parent) : null,
+    dataStreams: raw.map((s) => {
+      const out: Ga4DataStream = {
+        id:
+          String(s?.name ?? '')
+            .split('/')
+            .pop() ?? '',
+        displayName: String(s?.displayName ?? ''),
+        type: String(s?.type ?? ''),
+      };
+      if (s?.webStreamData?.measurementId) out.measurementId = String(s.webStreamData.measurementId);
+      if (s?.webStreamData?.defaultUri) out.defaultUri = String(s.webStreamData.defaultUri);
+      return out;
+    }),
+  };
+}
+
+/** Метка агрегата в разбивке воронки (вместо служебного RESERVED_TOTAL). */
+export const FUNNEL_BREAKDOWN_TOTAL = '(всего)';
+
+/**
+ * При funnelBreakdown GA4 добавляет к каждому шагу строку-итог, помечая её в колонке
+ * разбивки служебным RESERVED_TOTAL. Оставить как есть нельзя: строка выглядит обычным
+ * значением измерения, и сумма по строкам шага удваивается. Переименовываем в явную метку.
+ */
+export function markFunnelTotals(rows: Ga4ReportRow[], breakdownDimension?: string): { rows: Ga4ReportRow[]; hasTotals: boolean } {
+  if (!breakdownDimension) return { rows, hasTotals: false };
+  let hasTotals = false;
+  const out = rows.map((row) => {
+    const value = row[breakdownDimension];
+    if (typeof value !== 'string' || !/^RESERVED_/.test(value)) return row;
+    hasTotals = true;
+    return { ...row, [breakdownDimension]: FUNNEL_BREAKDOWN_TOTAL };
+  });
+  return { rows: out, hasTotals };
 }

@@ -21,24 +21,35 @@ import { createGoogleAuth, registerGoogleOauthTools } from '@seo-tools/shared/go
 import { z } from 'zod';
 import {
   buildDimensionFilter,
+  buildFunnelBody,
   buildMetricFilter,
   buildReportBody,
+  FUNNEL_BREAKDOWN_TOTAL,
   flattenAccountSummaries,
   forbidden403Hint,
   type Ga4FilterInput,
+  type Ga4FunnelStepInput,
   type Ga4MetricFilterInput,
   type Ga4Property,
   incompatibleFieldsFromError,
+  markFunnelTotals,
+  parseAnnotations,
   parseCompatibility,
   parseMetadata,
+  parsePropertyDetails,
+  parsePropertyQuota,
   parseReport,
   resolveProperty,
+  validateDateRange,
 } from './logic.js';
 
 loadSharedEnv();
 
 const DATA_API = 'https://analyticsdata.googleapis.com/v1beta';
 const ADMIN_API = 'https://analyticsadmin.googleapis.com/v1beta';
+// воронки и аннотации существуют ТОЛЬКО в alpha-версиях — в v1beta этих методов нет
+const DATA_API_ALPHA = 'https://analyticsdata.googleapis.com/v1alpha';
+const ADMIN_API_ALPHA = 'https://analyticsadmin.googleapis.com/v1alpha';
 const SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 // порт отличается от gsc (8585): серверы могут работать одновременно
 const OAUTH_PORT = Number(process.env.GA4_OAUTH_PORT || 8586); // реальный env процесса — ок
@@ -79,16 +90,18 @@ async function runReport(args: {
   compareEndDate?: string;
   metricFilters?: Ga4MetricFilterInput[];
   includeTotals?: boolean;
+  includeQuota?: boolean;
   account?: string;
 }) {
-  const body = buildReportBody(args);
+  const body = buildReportBody({ ...args, returnPropertyQuota: args.includeQuota });
   const data = await auth.googleFetch<any>(
     `${DATA_API}/${args.property}:runReport`,
     { method: 'POST', body: JSON.stringify(body) },
     args.account,
     args.property,
   );
-  const report = parseReport(data, { offset: args.offset });
+  const quota = parsePropertyQuota(data);
+  const report = { ...parseReport(data, { offset: args.offset }), ...(quota ? { quota } : {}) };
   // limit в GA4 — на ВЕСЬ ответ, а не на каждый период: при сравнении строки двух периодов
   // делят общий лимит по единому ранжированию, поэтому пары могут быть неполными
   if (args.compareStartDate && args.compareEndDate && report.truncated) {
@@ -115,6 +128,10 @@ const reportInput = {
     .describe('Начало периода сравнения (вместе с compareEndDate). В строках появится колонка dateRange: current/previous'),
   compareEndDate: z.string().optional().describe('Конец периода сравнения'),
   includeTotals: z.boolean().default(false).describe('Добавить итоги по метрикам (поле totals; при сравнении — по строке на период)'),
+  includeQuota: z
+    .boolean()
+    .default(false)
+    .describe('Добавить остаток квоты свойства (поле quota): сколько «токенов» Data API съел запрос и сколько осталось на час/сутки'),
   account: accountParam,
 };
 
@@ -616,6 +633,166 @@ server.registerTool(
     );
     // withMetadata:false — у realtime-ответа нет блока metadata (ни timeZone, ни currency, ни порога)
     return jsonResult({ property, realtime: true, ...parseReport(data, { withMetadata: false }) });
+  }),
+);
+
+server.registerTool(
+  'ga4_funnel',
+  {
+    description:
+      'Воронка GA4 (Data API runFunnelReport, v1alpha): сколько пользователей дошло до каждого шага и где отвалились. ' +
+      'Шаг задаётся событием (eventName) и/или условиями по измерениям. Минимум ДВА шага. ' +
+      'openFunnel=false (по умолчанию) — закрытая воронка: считаются только те, кто вошёл через ПЕРВЫЙ шаг; ' +
+      'true — пользователь может войти на любом шаге. isDirectlyFollowedBy — шаг обязан идти сразу за предыдущим. ' +
+      'breakdownDimension разбивает воронку по измерению (deviceCategory, sessionSourceMedium…); ' +
+      'у каждого шага появляется строка-ИТОГ с меткой "(всего)" — складывать её с остальными нельзя. ' +
+      'ВНИМАНИЕ 1: внутри ШАГОВ действует схема Exploration API, а НЕ обычная схема отчётов — ' +
+      'часть измерений там недоступна, в том числе pagePath (брать pagePathPlusQueryString, pageLocation ' +
+      'или unifiedPagePathScreen). ga4_metadata на шаги воронки не распространяется. ' +
+      'ВНИМАНИЕ 2: у воронок СВОЯ корзина квоты Data API, и запрос дорогой — порядка 10 «токенов» против 1 у обычного отчёта.',
+    inputSchema: {
+      propertyId: z.string().optional().describe('Числовой id свойства (по умолчанию GA4_PROPERTY_ID)'),
+      startDate: z.string().default('28daysAgo').describe('YYYY-MM-DD или ключевое слово GA4'),
+      endDate: z.string().default('yesterday').describe('YYYY-MM-DD или ключевое слово GA4'),
+      steps: z
+        .array(
+          z.object({
+            name: z.string().describe('Человекочитаемое имя шага, попадёт в ответ'),
+            eventName: z.string().optional().describe('Событие GA4: page_view, view_item, add_to_cart, begin_checkout, purchase…'),
+            filters: z
+              .array(
+                z.object({
+                  dimension: z.string(),
+                  matchType: z.enum(['EXACT', 'BEGINS_WITH', 'ENDS_WITH', 'CONTAINS', 'FULL_REGEXP', 'PARTIAL_REGEXP']),
+                  value: z.string(),
+                  caseSensitive: z.boolean().optional(),
+                  not: z.boolean().optional(),
+                }),
+              )
+              .optional()
+              .describe('Условия по измерениям (с eventName объединяются через AND)'),
+            isDirectlyFollowedBy: z.boolean().optional().describe('Шаг должен идти СРАЗУ после предыдущего (на первом шаге игнорируется)'),
+            withinMinutesFromPriorStep: z.number().positive().optional().describe('Не позже N минут после предыдущего шага'),
+          }),
+        )
+        .min(2)
+        .describe('Шаги воронки по порядку, минимум два'),
+      openFunnel: z.boolean().default(false).describe('true — открытая воронка (вход на любом шаге)'),
+      breakdownDimension: z.string().optional().describe('Измерение для разбивки воронки, например deviceCategory'),
+      breakdownLimit: z.number().int().min(1).max(15).optional().describe('Сколько значений разбивки оставить (по умолчанию — решает GA4)'),
+      filters: z
+        .array(
+          z.object({
+            dimension: z.string(),
+            matchType: z.enum(['EXACT', 'BEGINS_WITH', 'ENDS_WITH', 'CONTAINS', 'FULL_REGEXP', 'PARTIAL_REGEXP']),
+            value: z.string(),
+            caseSensitive: z.boolean().optional(),
+            not: z.boolean().optional(),
+          }),
+        )
+        .optional()
+        .describe('Фильтр по ВСЕЙ воронке (не по отдельному шагу)'),
+      limit: z.number().int().min(1).max(10_000).default(100).describe('Сколько строк таблицы воронки вернуть'),
+      includeQuota: z.boolean().default(false).describe('Добавить остаток квоты (у воронок корзина своя)'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const property = resolveProperty(args.propertyId, args.account);
+    const body = buildFunnelBody({ ...args, steps: args.steps as Ga4FunnelStepInput[], returnPropertyQuota: args.includeQuota });
+    const data = await auth.googleFetch<any>(
+      // воронки живут ТОЛЬКО в v1alpha — в v1beta этого метода нет
+      `${DATA_API_ALPHA}/${property}:runFunnelReport`,
+      { method: 'POST', body: JSON.stringify(body) },
+      args.account,
+      property,
+    );
+    // funnelTable — обычный отчёт по форме (заголовки + строки), но БЕЗ блока metadata
+    const table = parseReport(data?.funnelTable, { withMetadata: false });
+    const { rows, hasTotals } = markFunnelTotals(table.rows, args.breakdownDimension);
+    const quota = parsePropertyQuota(data);
+    return jsonResult({
+      property,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      openFunnel: Boolean(args.openFunnel),
+      steps: args.steps.map((s: { name: string }) => s.name),
+      ...table,
+      rows,
+      ...(hasTotals
+        ? {
+            note:
+              `У каждого шага есть строка с ${args.breakdownDimension}="${FUNNEL_BREAKDOWN_TOTAL}" — это ИТОГ по шагу, ` +
+              'а не ещё одно значение разбивки: складывать его с остальными строками шага нельзя.',
+          }
+        : {}),
+      ...(quota ? { quota } : {}),
+    });
+  }),
+);
+
+server.registerTool(
+  'ga4_annotations',
+  {
+    description:
+      'Аннотации свойства GA4 (Admin API reportingDataAnnotations, v1alpha) — пометки на датах: релизы, редизайны, ' +
+      'рекламные кампании, а также сгенерированные самой GA4 (systemGenerated=true). ' +
+      'ВЫЗЫВАТЬ, когда в динамике виден необъяснимый скачок или провал: аннотация часто и есть объяснение. ' +
+      'Аннотация бывает на одну дату (date) или на период (date + endDate).',
+    inputSchema: {
+      propertyId: z.string().optional().describe('Числовой id свойства (по умолчанию GA4_PROPERTY_ID)'),
+      startDate: z.string().optional().describe('Оставить аннотации, пересекающие период (YYYY-MM-DD; вместе с endDate)'),
+      endDate: z.string().optional().describe('Конец периода (YYYY-MM-DD)'),
+      limit: z.number().int().min(1).max(200).default(100).describe('Сколько аннотаций вернуть'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const property = resolveProperty(args.propertyId, args.account);
+    if (Boolean(args.startDate) !== Boolean(args.endDate)) {
+      throw new Error('Для фильтра по периоду нужны ОБА параметра: startDate и endDate.');
+    }
+    const qs = new URLSearchParams({ pageSize: String(Math.min(args.limit, 200)) });
+    if (args.startDate && args.endDate) {
+      validateDateRange(args.startDate, args.endDate);
+      // Серверный фильтр Admin API: аннотация пересекается с периодом. Хвост «= true»
+      // обязателен — это предикат, а не вызов-условие: без него API отвечает 400
+      // INVALID_ARGUMENT без единого намёка на причину.
+      qs.set('filter', `is_annotation_in_range("${args.startDate}", "${args.endDate}") = true`);
+    }
+    const data = await auth.googleFetch<any>(
+      `${ADMIN_API_ALPHA}/${property}/reportingDataAnnotations?${qs}`,
+      { method: 'GET' },
+      args.account,
+      property,
+    );
+    return jsonResult({ property, ...parseAnnotations(data, args.limit) });
+  }),
+);
+
+server.registerTool(
+  'ga4_property_details',
+  {
+    description:
+      'Карточка свойства GA4 (Admin API): таймзона отчётов, валюта, отрасль, уровень сервиса (STANDARD или 360 — от него ' +
+      'зависят квоты и сэмплирование), дата создания и ПОТОКИ ДАННЫХ с их Measurement ID (G-XXXXXXX). ' +
+      'ВЫЗЫВАТЬ, когда даты в отчётах не сходятся с ожидаемыми (GA4 считает сутки в таймзоне свойства, не в UTC) ' +
+      'или когда нужно сопоставить свойство с кодом счётчика на сайте.',
+    inputSchema: {
+      propertyId: z.string().optional().describe('Числовой id свойства (по умолчанию GA4_PROPERTY_ID)'),
+      account: accountParam,
+    },
+  },
+  safeHandler(async (args) => {
+    const property = resolveProperty(args.propertyId, args.account);
+    // потоки — отдельный вызов; их отсутствие (нет прав/нет потоков) не должно ронять карточку
+    const [details, streams] = await Promise.all([
+      auth.googleFetch<any>(`${ADMIN_API}/${property}`, { method: 'GET' }, args.account, property),
+      auth
+        .googleFetch<any>(`${ADMIN_API}/${property}/dataStreams?pageSize=50`, { method: 'GET' }, args.account, property)
+        .catch(() => ({})),
+    ]);
+    return jsonResult(parsePropertyDetails(details, streams));
   }),
 );
 

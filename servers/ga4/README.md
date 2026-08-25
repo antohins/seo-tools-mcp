@@ -37,6 +37,9 @@ GA4 uses Google OAuth — no env needed to start; authorize right in the chat vi
 - `ga4_top_pages` — top pages by path, landing page or title; `organicOnly` + `pathContains` filters
 - `ga4_events` — event counts by `eventName`; `keyEventsOnly` for key events (former conversions)
 - `ga4_realtime` — realtime report (last 30 minutes)
+- `ga4_funnel` — funnel (`runFunnelReport`): how many reached each step and where they dropped off; a step is an event and/or dimension conditions, with an optional breakdown. Steps follow the Exploration API schema (`pagePath` is unavailable there), the quota bucket is separate and a call costs more than a plain report
+- `ga4_annotations` — property annotations: notes pinned to dates, including ones GA4 generated itself (`systemGenerated`) — often the explanation for an unexplained jump in a trend
+- `ga4_property_details` — property card: reporting time zone, currency, service level (STANDARD/360) and data streams with their `G-XXXXXXX` Measurement IDs
 
 > **Period comparison and totals.** Every report tool accepts `compareStartDate`/`compareEndDate` (rows then carry a `dateRange` column valued `current`/`previous`) and `includeTotals` (a `totals` field, one row per period when comparing). Note that GA4's `limit` applies to the **whole** response, not per period — when comparing, raise it (roughly double) so both periods get their rows; the response says so explicitly when it matters.
 

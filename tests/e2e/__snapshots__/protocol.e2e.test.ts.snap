@@ -20,16 +20,19 @@ exports[`MCP-протокол на собранных серверах > aparser
 
 exports[`MCP-протокол на собранных серверах > ga4: список инструментов не поехал 1`] = `
 [
+  "ga4_annotations",
   "ga4_auth_status",
   "ga4_bytime",
   "ga4_check_compatibility",
   "ga4_devices",
   "ga4_events",
+  "ga4_funnel",
   "ga4_geo",
   "ga4_list_properties",
   "ga4_metadata",
   "ga4_oauth_finish",
   "ga4_oauth_start",
+  "ga4_property_details",
   "ga4_realtime",
   "ga4_report",
   "ga4_save_sa_json",

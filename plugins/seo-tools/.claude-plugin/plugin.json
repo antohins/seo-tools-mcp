@@ -3,7 +3,7 @@
   "name": "seo-tools",
   "displayName": "SEO Tools: everything",
   "version": "1.7.0",
-  "description": "All eight servers at once: XMLStock, XMLRiver, Wordstat, Search Console, Analytics 4, Yandex.Webmaster, Yandex.Metrica and the A-Parser bridge. ~98 tools — prefer the single-server plugins unless you need the lot.",
+  "description": "All eight servers at once: XMLStock, XMLRiver, Wordstat, Search Console, Analytics 4, Yandex.Webmaster, Yandex.Metrica and the A-Parser bridge. ~100 tools — prefer the single-server plugins unless you need the lot.",
   "author": {
     "name": "antohins",
     "url": "https://github.com/antohins"

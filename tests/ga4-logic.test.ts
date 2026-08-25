@@ -442,3 +442,209 @@ describe('parseReport: итоги', () => {
     expect('totals' in logic.parseReport({ rowCount: 0 })).toBe(false);
   });
 });
+
+describe('buildFunnelBody', () => {
+  const base = { startDate: '2026-01-01', endDate: '2026-01-31', limit: 100 };
+
+  it('шаг по событию + условие по измерению объединяются через AND', () => {
+    const body = logic.buildFunnelBody({
+      ...base,
+      steps: [
+        { name: 'Просмотр', eventName: 'page_view', filters: [{ dimension: 'pagePath', matchType: 'BEGINS_WITH', value: '/catalog' }] },
+        { name: 'Покупка', eventName: 'purchase' },
+      ],
+    });
+    const funnel = body.funnel as any;
+    expect(funnel.steps[0].filterExpression.andGroup.expressions).toEqual([
+      { funnelEventFilter: { eventName: 'page_view' } },
+      { funnelFieldFilter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value: '/catalog', caseSensitive: false } } },
+    ]);
+    // одиночное условие не заворачивается в группу
+    expect(funnel.steps[1].filterExpression).toEqual({ funnelEventFilter: { eventName: 'purchase' } });
+  });
+
+  it('по умолчанию воронка ЗАКРЫТАЯ', () => {
+    // API-умолчание тоже false, но полагаться на него нельзя: смысл воронки меняется целиком
+    expect(
+      (
+        logic.buildFunnelBody({
+          ...base,
+          steps: [
+            { name: 'a', eventName: 'x' },
+            { name: 'b', eventName: 'y' },
+          ],
+        }).funnel as any
+      ).isOpenFunnel,
+    ).toBe(false);
+    const open = logic.buildFunnelBody({
+      ...base,
+      openFunnel: true,
+      steps: [
+        { name: 'a', eventName: 'x' },
+        { name: 'b', eventName: 'y' },
+      ],
+    });
+    expect((open.funnel as any).isOpenFunnel).toBe(true);
+  });
+
+  it('ограничения «сразу после» и «не позже N минут» на первом шаге отбрасываются', () => {
+    // до первого шага ничего не было — GA4 такие поля молча игнорирует, но в теле они мусор
+    const body = logic.buildFunnelBody({
+      ...base,
+      steps: [
+        { name: 'a', eventName: 'x', isDirectlyFollowedBy: true, withinMinutesFromPriorStep: 5 },
+        { name: 'b', eventName: 'y', isDirectlyFollowedBy: true, withinMinutesFromPriorStep: 30 },
+      ],
+    });
+    const steps = (body.funnel as any).steps;
+    expect(steps[0].isDirectlyFollowedBy).toBeUndefined();
+    expect(steps[0].withinDurationFromPriorStep).toBeUndefined();
+    expect(steps[1]).toMatchObject({ isDirectlyFollowedBy: true, withinDurationFromPriorStep: '1800s' });
+  });
+
+  it('меньше двух шагов и пустой шаг — ошибка с объяснением', () => {
+    expect(() => logic.buildFunnelBody({ ...base, steps: [{ name: 'a', eventName: 'x' }] })).toThrow(/минимум ДВА шага/);
+    expect(() => logic.buildFunnelBody({ ...base, steps: [{ name: 'a', eventName: 'x' }, { name: 'b' }] })).toThrow(/Шаг 2 \("b"\) пустой/);
+  });
+
+  it('разбивка и общий фильтр попадают в тело', () => {
+    const body = logic.buildFunnelBody({
+      ...base,
+      steps: [
+        { name: 'a', eventName: 'x' },
+        { name: 'b', eventName: 'y' },
+      ],
+      breakdownDimension: 'deviceCategory',
+      breakdownLimit: 5,
+      filters: [{ dimension: 'country', matchType: 'EXACT', value: 'Russia' }],
+      returnPropertyQuota: true,
+    });
+    expect(body.funnelBreakdown).toEqual({ breakdownDimension: { name: 'deviceCategory' }, limit: 5 });
+    expect(body.dimensionFilter).toBeDefined();
+    expect(body.returnPropertyQuota).toBe(true);
+  });
+});
+
+describe('parsePropertyQuota', () => {
+  it('плоские корзины; пустые не выдумываются', () => {
+    const quota = logic.parsePropertyQuota({
+      propertyQuota: {
+        tokensPerDay: { consumed: 12, remaining: 24988 },
+        tokensPerHour: { consumed: 12, remaining: 4988 },
+        concurrentRequests: {},
+      },
+    });
+    expect(quota).toEqual({
+      tokensPerDay: { consumed: 12, remaining: 24988 },
+      tokensPerHour: { consumed: 12, remaining: 4988 },
+    });
+  });
+
+  it('без propertyQuota — undefined, а не пустой объект', () => {
+    // иначе в ответе появилось бы поле quota:{}, читаемое как «квота исчерпана»
+    expect(logic.parsePropertyQuota({})).toBeUndefined();
+    expect(logic.parsePropertyQuota({ propertyQuota: {} })).toBeUndefined();
+  });
+});
+
+describe('parseAnnotations', () => {
+  it('одиночная дата и период сводятся к date/endDate', () => {
+    const parsed = logic.parseAnnotations({
+      reportingDataAnnotations: [
+        { name: 'properties/1/reportingDataAnnotations/77', title: 'Редизайн', annotationDate: { year: 2026, month: 3, day: 7 } },
+        {
+          name: 'properties/1/reportingDataAnnotations/78',
+          title: 'Кампания',
+          description: 'Чёрная пятница',
+          annotationDateRange: { startDate: { year: 2025, month: 11, day: 24 }, endDate: { year: 2025, month: 12, day: 1 } },
+          systemGenerated: true,
+        },
+      ],
+    });
+    expect(parsed.annotations[0]).toEqual({ id: '77', title: 'Редизайн', date: '2026-03-07', systemGenerated: false });
+    expect(parsed.annotations[1]).toMatchObject({
+      date: '2025-11-24',
+      endDate: '2025-12-01',
+      systemGenerated: true,
+      description: 'Чёрная пятница',
+    });
+  });
+
+  it('месяц и день дополняются нулём', () => {
+    const parsed = logic.parseAnnotations({ reportingDataAnnotations: [{ title: 'x', annotationDate: { year: 2026, month: 1, day: 5 } }] });
+    expect(parsed.annotations[0].date).toBe('2026-01-05');
+  });
+
+  it('nextPageToken означает truncated', () => {
+    expect(logic.parseAnnotations({ reportingDataAnnotations: [], nextPageToken: 'abc' }).truncated).toBe(true);
+    expect(logic.parseAnnotations({ reportingDataAnnotations: [{ title: 'a' }, { title: 'b' }] }, 1).truncated).toBe(true);
+  });
+});
+
+describe('parsePropertyDetails', () => {
+  it('карточка свойства + Measurement ID потоков', () => {
+    const parsed = logic.parsePropertyDetails(
+      {
+        name: 'properties/479608460',
+        displayName: 'auto.ae',
+        timeZone: 'Asia/Dubai',
+        currencyCode: 'AED',
+        industryCategory: 'AUTOMOTIVE',
+        serviceLevel: 'GOOGLE_ANALYTICS_STANDARD',
+        createTime: '2024-02-01T10:00:00Z',
+        parent: 'accounts/123',
+      },
+      {
+        dataStreams: [
+          {
+            name: 'properties/479608460/dataStreams/9',
+            displayName: 'Web',
+            type: 'WEB_DATA_STREAM',
+            webStreamData: { measurementId: 'G-ABC123', defaultUri: 'https://auto.ae' },
+          },
+        ],
+      },
+    );
+    expect(parsed).toMatchObject({ propertyId: '479608460', timeZone: 'Asia/Dubai', serviceLevel: 'GOOGLE_ANALYTICS_STANDARD' });
+    expect(parsed.dataStreams[0]).toEqual({
+      id: '9',
+      displayName: 'Web',
+      type: 'WEB_DATA_STREAM',
+      measurementId: 'G-ABC123',
+      defaultUri: 'https://auto.ae',
+    });
+  });
+
+  it('без потоков карточка всё равно собирается', () => {
+    // dataStreams запрашиваются отдельно и могут упасть по правам — свойство важнее
+    expect(logic.parsePropertyDetails({ name: 'properties/1', displayName: 'x' }, {}).dataStreams).toEqual([]);
+  });
+});
+
+describe('markFunnelTotals', () => {
+  const rows = [
+    { funnelStepName: '1. Сессия', deviceCategory: 'RESERVED_TOTAL', activeUsers: 32810 },
+    { funnelStepName: '1. Сессия', deviceCategory: 'mobile', activeUsers: 26283 },
+    { funnelStepName: '1. Сессия', deviceCategory: 'desktop', activeUsers: 6197 },
+  ];
+
+  it('служебный RESERVED_TOTAL превращается в явную метку итога', () => {
+    // без этого строка выглядит обычным значением разбивки и сумма по шагу удваивается
+    const out = logic.markFunnelTotals(rows, 'deviceCategory');
+    expect(out.hasTotals).toBe(true);
+    expect(out.rows.map((r) => r.deviceCategory)).toEqual([logic.FUNNEL_BREAKDOWN_TOTAL, 'mobile', 'desktop']);
+    expect(out.rows[0].activeUsers).toBe(32810);
+  });
+
+  it('без разбивки строки не трогаются', () => {
+    const out = logic.markFunnelTotals(rows, undefined);
+    expect(out.hasTotals).toBe(false);
+    expect(out.rows).toBe(rows);
+  });
+
+  it('обычные значения не переименовываются', () => {
+    const out = logic.markFunnelTotals([{ funnelStepName: '1', deviceCategory: 'mobile', activeUsers: 1 }], 'deviceCategory');
+    expect(out.hasTotals).toBe(false);
+    expect(out.rows[0].deviceCategory).toBe('mobile');
+  });
+});

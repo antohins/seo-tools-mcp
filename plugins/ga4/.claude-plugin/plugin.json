@@ -3,7 +3,7 @@
   "name": "ga4",
   "displayName": "SEO Tools: Google Analytics 4",
   "version": "1.7.0",
-  "description": "GA4 reports, traffic sources, landing pages, events and realtime. Read-only; run ga4_oauth_start after install to authorise.",
+  "description": "GA4 reports, traffic sources, landing pages, events, funnels, annotations and realtime. Read-only; run ga4_oauth_start after install to authorise.",
   "author": {
     "name": "antohins",
     "url": "https://github.com/antohins"
