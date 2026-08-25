@@ -76,7 +76,19 @@ const aggregators = (): string[] =>
     .filter(Boolean);
 
 // withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
-const server = withToolDefaults(new McpServer({ name: 'xmlstock', version: '1.7.0' }));
+// Платные — все, кроме auth_status/set_credentials/balance: каждый вызов = списание
+// (у Wordstat-инструментов тариф ещё и выше обычного SERP).
+const BILLED = [
+  'xmlstock_serp',
+  'xmlstock_images',
+  'xmlstock_news',
+  'xmlstock_video',
+  'xmlstock_wordstat',
+  'xmlstock_wordstat_dynamics',
+  'xmlstock_wordstat_regions',
+  'xmlstock_wordstat_regions_tree',
+];
+const server = withToolDefaults(new McpServer({ name: 'xmlstock', version: '1.7.0' }), { billed: BILLED });
 
 registerAuthTools(
   server,

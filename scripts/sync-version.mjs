@@ -38,10 +38,17 @@ const rel = (p) => relative(ROOT, p);
  * Проверяет (или чинит) одно поле JSON.
  * `set` вызывается только когда `get` вернул значение, поэтому сеттеру не нужны guard'ы
  * на отсутствующие узлы: нет поля — это отдельная понятная жалоба, а не TypeError
- * посреди прохода с уже переписанной половиной файлов.
+ * посреди прохода с уже переписанной половиной файлов. Нет файла — тоже жалоба.
  */
 function checkField(path, get, set, label) {
   places++;
+  // Отсутствующий файл — обычная жалоба, а не ENOENT-стек. Ловится, например, когда
+  // в plugins/ завёлся каталог без манифеста: version:check в CI идёт ПЕРЕД plugins:check,
+  // и голое падение здесь скрыло бы настоящую причину.
+  if (!existsSync(path)) {
+    problems.push(`${rel(path)}: файл отсутствует`);
+    return;
+  }
   const json = JSON.parse(readFileSync(path, 'utf8'));
   const actual = get(json);
   const where = `${rel(path)} → ${label}`;

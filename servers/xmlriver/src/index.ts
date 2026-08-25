@@ -83,7 +83,19 @@ const aggregators = (): string[] =>
     .filter(Boolean);
 
 // withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
-const server = withToolDefaults(new McpServer({ name: 'xmlriver', version: '1.7.0' }));
+// Платные — все, кроме auth_status/set_credentials/balance. У xmlriver списание ещё и
+// кратное: каждые ~10 результатов выдачи — отдельный запрос, а suggest тарифицирует
+// КАЖДУЮ переданную фразу.
+const BILLED = [
+  'xmlriver_serp',
+  'xmlriver_images',
+  'xmlriver_news',
+  'xmlriver_check_index',
+  'xmlriver_suggest',
+  'xmlriver_related_questions',
+  'xmlriver_maps',
+];
+const server = withToolDefaults(new McpServer({ name: 'xmlriver', version: '1.7.0' }), { billed: BILLED });
 
 registerAuthTools(
   server,

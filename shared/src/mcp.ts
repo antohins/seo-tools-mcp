@@ -69,7 +69,18 @@ function deriveTitle(toolName: string): string {
  */
 type ToolRegistrar = { registerTool: (name: string, config: Record<string, unknown>, handler: unknown) => unknown };
 
-export function withToolDefaults<T>(server: T): T {
+export interface ToolDefaultsOptions {
+  /**
+   * Инструменты, КАЖДЫЙ вызов которых тратит платный ресурс: запрос к SERP-провайдеру,
+   * прокси-трафик своего парсера. Хост читает readOnlyHint:true как «побочных эффектов нет»
+   * и перестаёт спрашивать подтверждение — а агент, прогоняющий пул из трёхсот ключей,
+   * молча съедает предоплаченный баланс. Поэтому им читаемость не заявляется.
+   */
+  billed?: readonly string[];
+}
+
+export function withToolDefaults<T>(server: T, opts: ToolDefaultsOptions = {}): T {
+  const billed = new Set(opts.billed ?? []);
   const target = server as unknown as ToolRegistrar;
   const original = target.registerTool.bind(target);
   target.registerTool = (name: string, config: Record<string, unknown>, handler: unknown) =>
@@ -78,7 +89,13 @@ export function withToolDefaults<T>(server: T): T {
       {
         title: deriveTitle(name),
         ...config,
-        annotations: { readOnlyHint: true, openWorldHint: true, ...((config.annotations as object) ?? {}) },
+        annotations: {
+          // По умолчанию инструмент только читает. Для платных — эффект есть (списание),
+          // но он не разрушительный и НЕ идемпотентный: повтор стоит ещё раз.
+          ...(billed.has(name) ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false } : { readOnlyHint: true }),
+          openWorldHint: true,
+          ...((config.annotations as object) ?? {}),
+        },
       },
       handler,
     );

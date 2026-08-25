@@ -54,7 +54,11 @@ import {
 loadSharedEnv();
 
 // withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
-const server = withToolDefaults(new McpServer({ name: 'aparser', version: '1.7.0' }));
+// Запуск задачи парсинга тратит ресурс пользователя — прокси-трафик и потоки его сервера.
+// Денег провайдеру не платится, но ресурс метрируемый, и bulk_request легко съедает его
+// целиком. Чтение конфигурации (ping/status/parsers/proxies/get_preset) — бесплатно.
+const BILLED = ['aparser_serp_google', 'aparser_serp_yandex', 'aparser_suggest', 'aparser_request', 'aparser_bulk_request'];
+const server = withToolDefaults(new McpServer({ name: 'aparser', version: '1.7.0' }), { billed: BILLED });
 
 registerAuthTools(
   server,

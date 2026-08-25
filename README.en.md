@@ -9,7 +9,7 @@
 
 [Русский](README.md) | **English**
 
-Eight **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Google Analytics 4, Yandex.Webmaster, Yandex.Metrica and self-hosted A-Parser straight from Claude Code (or any MCP client). All tools are **read-only**, output is strict JSON. Not tied to a specific site: defaults (GSC property, GA4 property, Webmaster host, Metrica counter) are configured on the fly.
+Eight **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, Google Search Console, Google Analytics 4, Yandex.Webmaster, Yandex.Metrica and self-hosted A-Parser straight from Claude Code (or any MCP client). All tools are **read-only** — nothing is published or changed in your accounts — and the output is strict JSON. That is declared machine-readably via the `readOnlyHint` annotation, which is deliberately **absent** on the twenty tools whose every call spends a metered resource (an XMLStock/XMLRiver request, A-Parser proxy traffic): otherwise a client would treat them as harmless and stop asking for confirmation before a run across a large keyword pool. Not tied to a specific site: defaults (GSC property, GA4 property, Webmaster host, Metrica counter) are configured on the fly.
 
 > 🛰 We use these servers in production at **[PBN Workers](https://pbn-workers.com/tools/seo-tools-mcp/)** — search-visibility infrastructure: semantic cores, PBN & satellites, SEO automation. Need steady organic traffic? [Get in touch](https://pbn-workers.com/tools/seo-tools-mcp/).
 

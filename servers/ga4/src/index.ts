@@ -799,14 +799,25 @@ server.registerTool(
   },
   safeHandler(async (args) => {
     const property = resolveProperty(args.propertyId, args.account);
-    // потоки — отдельный вызов; их отсутствие (нет прав/нет потоков) не должно ронять карточку
+    // Потоки — отдельный вызов, и он может не пройти (нет прав, 429, 5xx). Ронять из-за
+    // этого карточку не нужно, но и молча отдавать dataStreams:[] нельзя: пустой список
+    // читается как «у свойства нет веб-потока и Measurement ID» — то есть ровно тот факт,
+    // ради которого инструмент и зовут, оказался бы выдуманным. Ошибку показываем.
     const [details, streams] = await Promise.all([
       auth.googleFetch<any>(`${ADMIN_API}/${property}`, { method: 'GET' }, args.account, property),
       auth
         .googleFetch<any>(`${ADMIN_API}/${property}/dataStreams?pageSize=50`, { method: 'GET' }, args.account, property)
-        .catch(() => ({})),
+        .catch((err: unknown) => ({ __error: err instanceof Error ? err.message : String(err) })),
     ]);
-    return jsonResult(parsePropertyDetails(details, streams));
+    const streamsError = (streams as { __error?: string }).__error;
+    return jsonResult({
+      ...parsePropertyDetails(details, streamsError ? {} : streams),
+      ...(streamsError
+        ? {
+            dataStreamsError: `Список потоков получить не удалось, поэтому dataStreams пуст НЕ потому, что потоков нет: ${streamsError.slice(0, 300)}`,
+          }
+        : {}),
+    });
   }),
 );
 

@@ -64,6 +64,24 @@ All notable changes to this project are documented here. The format is based on
   "MCP servers (0)" — a lie in the most visible place of the plugin catalogue.
 
 ### Fixed
+- **annotations**: `readOnlyHint: true` was asserted for *every* non-writing tool, the metered ones
+  included. Hosts read that as "no side effects" and stop asking for confirmation — so an agent
+  looping a few hundred keywords through `xmlstock_serp` (where `depth` alone can mean 50 billed
+  page requests per call) would drain a prepaid balance unattended. The 20 tools that spend a
+  metered resource — the XMLStock and XMLRiver SERP/Wordstat calls, and the A-Parser tools that
+  actually launch a parsing job and burn proxy traffic — no longer claim it, and carry
+  `destructiveHint: false` with `idempotentHint: false` instead: there is an effect, it destroys
+  nothing, and repeating the call costs again. Read-only counts are now 18 writers + 20 metered.
+- **ga4**: `ga4_property_details` swallowed every `dataStreams.list` failure into an empty list, so
+  a permission gap or a 429 read as "this property has no web stream and no Measurement ID" — a
+  fabricated answer in the one tool whose job is matching a property to the counter on the site.
+  It now returns `dataStreamsError` alongside the property card. Verified by pointing the call at a
+  bad path: the card still builds, and the error says why the list is empty.
+- **tooling**: `pnpm version:check` walked the plugin manifests without the existence guard the
+  server loop uses, so a `plugins/<x>/` directory lacking `.claude-plugin/plugin.json` died with a
+  raw ENOENT stack. It matters that this CI step runs *before* `plugins:check`, which is the check
+  that would have explained the stray directory. Missing files are a readable complaint now, at
+  every call site.
 - **ga4**: `ga4_annotations` validated its dates with the reporting validator, which accepts GA4
   keywords like `28daysAgo`. The Admin API filter behind it takes literal `YYYY-MM-DD` only, so a
   keyword sailed through and came back as a bare 400 `INVALID_ARGUMENT`. It is now rejected locally

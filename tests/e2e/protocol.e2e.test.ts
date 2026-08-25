@@ -18,7 +18,36 @@ import { beforeAll, describe, expect, it } from 'vitest';
 const ROOT = join(import.meta.dirname, '..', '..');
 const SERVERS = ['xmlstock', 'xmlriver', 'wordstat', 'gsc', 'ga4', 'ywm', 'metrika', 'aparser'] as const;
 
-/** Инструменты, которые ПИШУТ (в конфиг): единственные, кому позволено не быть read-only. */
+/**
+ * Инструменты, КАЖДЫЙ вызов которых тратит платный (или метрируемый) ресурс: запрос к
+ * SERP-провайдеру, прокси-трафик своего A-Parser. readOnlyHint:true хост читает как
+ * «побочных эффектов нет» и перестаёт спрашивать подтверждение — прогон пула из сотен
+ * ключей молча съел бы предоплаченный баланс.
+ */
+const BILLED = new Set([
+  'xmlstock_serp',
+  'xmlstock_images',
+  'xmlstock_news',
+  'xmlstock_video',
+  'xmlstock_wordstat',
+  'xmlstock_wordstat_dynamics',
+  'xmlstock_wordstat_regions',
+  'xmlstock_wordstat_regions_tree',
+  'xmlriver_serp',
+  'xmlriver_images',
+  'xmlriver_news',
+  'xmlriver_check_index',
+  'xmlriver_suggest',
+  'xmlriver_related_questions',
+  'xmlriver_maps',
+  'aparser_serp_google',
+  'aparser_serp_yandex',
+  'aparser_suggest',
+  'aparser_request',
+  'aparser_bulk_request',
+]);
+
+/** Инструменты, которые ПИШУТ в конфиг. */
 const WRITERS = new Set([
   'xmlstock_set_credentials',
   'xmlriver_set_credentials',
@@ -47,7 +76,7 @@ interface ToolInfo {
   name: string;
   title?: string;
   description?: string;
-  annotations?: { readOnlyHint?: boolean; openWorldHint?: boolean };
+  annotations?: { readOnlyHint?: boolean; openWorldHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
 }
 
 interface Session {
@@ -121,19 +150,30 @@ describe('MCP-протокол на собранных серверах', () => 
 
   it.each(SERVERS)('%s: read-only заявлен ровно там, где он правда', (server) => {
     for (const t of (sessions.get(server) as Session).tools) {
-      expect(`${t.name} readOnly=${t.annotations?.readOnlyHint}`).toBe(`${t.name} readOnly=${!WRITERS.has(t.name)}`);
+      const free = !WRITERS.has(t.name) && !BILLED.has(t.name);
+      expect(`${t.name} readOnly=${t.annotations?.readOnlyHint}`).toBe(`${t.name} readOnly=${free}`);
       expect(`${t.name} openWorld=${t.annotations?.openWorldHint}`).toBe(`${t.name} openWorld=true`);
     }
   });
 
-  it('во всём наборе ровно 18 пишущих инструментов', () => {
+  it.each(SERVERS)('%s: у платных инструментов эффект не разрушительный и не идемпотентный', (server) => {
+    // повтор платного вызова стоит ещё раз — хост не должен считать его безопасным ретраем
+    for (const t of (sessions.get(server) as Session).tools) {
+      if (!BILLED.has(t.name)) continue;
+      expect(`${t.name} destructive=${t.annotations?.destructiveHint}`).toBe(`${t.name} destructive=false`);
+      expect(`${t.name} idempotent=${t.annotations?.idempotentHint}`).toBe(`${t.name} idempotent=false`);
+    }
+  });
+
+  it('read-only не заявлен ровно у 18 пишущих и 20 платных инструментов', () => {
     // «только чтение» — главное обещание продукта; молчаливый рост этого числа его отменяет
-    const writers = [...sessions.values()]
+    const notReadOnly = [...sessions.values()]
       .flatMap((s) => s.tools)
       .filter((t) => t.annotations?.readOnlyHint === false)
       .map((t) => t.name)
       .sort();
-    expect(writers).toEqual([...WRITERS].sort());
+    expect(notReadOnly).toEqual([...WRITERS, ...BILLED].sort());
+    expect({ пишущих: WRITERS.size, платных: BILLED.size }).toEqual({ пишущих: 18, платных: 20 });
   });
 
   it.each(SERVERS)('%s: auth_status работает без ключей и объясняет, чего не хватает', (server) => {

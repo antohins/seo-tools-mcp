@@ -41,3 +41,39 @@ describe('withToolDefaults', () => {
     expect(tools.get('unknown_thing')?.title).toBe('unknown: thing');
   });
 });
+
+describe('withToolDefaults: платные инструменты', () => {
+  function fake() {
+    const tools = new Map<string, { annotations?: Record<string, unknown> }>();
+    const srv = { registerTool: (name: string, config: Record<string, unknown>) => tools.set(name, config) };
+    return { srv, tools };
+  }
+
+  it('платный не заявляет read-only и не выглядит безопасным ретраем', () => {
+    // хост читает readOnlyHint:true как «эффектов нет» и перестаёт спрашивать подтверждение
+    const { srv, tools } = fake();
+    const server = withToolDefaults(srv, { billed: ['xmlstock_serp'] });
+    server.registerTool('xmlstock_serp', { description: 'x' }, () => {});
+    server.registerTool('xmlstock_balance', { description: 'x' }, () => {});
+    expect(tools.get('xmlstock_serp')?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
+    expect(tools.get('xmlstock_balance')?.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });
+  });
+
+  it('без списка billed поведение прежнее', () => {
+    const { srv, tools } = fake();
+    withToolDefaults(srv).registerTool('ga4_report', { description: 'x' }, () => {});
+    expect(tools.get('ga4_report')?.annotations).toEqual({ readOnlyHint: true, openWorldHint: true });
+  });
+
+  it('явная аннотация инструмента перевешивает и для платного', () => {
+    const { srv, tools } = fake();
+    const server = withToolDefaults(srv, { billed: ['x_tool'] });
+    server.registerTool('x_tool', { description: 'x', annotations: { idempotentHint: true } }, () => {});
+    expect(tools.get('x_tool')?.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
+  });
+});
