@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ga4",
   "displayName": "SEO Tools: Google Analytics 4",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "GA4 reports, traffic sources, landing pages, events, funnels, annotations and realtime. Read-only; run ga4_oauth_start after install to authorise.",
   "author": {
     "name": "antohins",

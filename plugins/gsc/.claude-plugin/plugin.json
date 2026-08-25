@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "gsc",
   "displayName": "SEO Tools: Google Search Console",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Search Analytics, URL Inspection and sitemaps from Google Search Console. Read-only; run gsc_oauth_start after install to authorise.",
   "author": {
     "name": "antohins",

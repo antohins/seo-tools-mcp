@@ -54,7 +54,7 @@ interface TopResponse {
 }
 
 // withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
-const server = withToolDefaults(new McpServer({ name: 'wordstat', version: '1.7.0' }));
+const server = withToolDefaults(new McpServer({ name: 'wordstat', version: '1.8.0' }));
 
 registerAuthTools(
   server,

@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "xmlriver",
   "displayName": "SEO Tools: XMLRiver (SERP + indexation)",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Google & Yandex SERP, image/news/maps verticals, People Also Ask and URL indexation checks via XMLRiver. Read-only.",
   "author": {
     "name": "antohins",

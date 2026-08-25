@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ywm",
   "displayName": "SEO Tools: Yandex.Webmaster",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Search queries, indexing history, SQI, diagnostics and broken links from Yandex.Webmaster. Read-only; run ywm_oauth_start after install.",
   "author": {
     "name": "antohins",

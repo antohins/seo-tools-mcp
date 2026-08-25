@@ -88,7 +88,7 @@ const BILLED = [
   'xmlstock_wordstat_regions',
   'xmlstock_wordstat_regions_tree',
 ];
-const server = withToolDefaults(new McpServer({ name: 'xmlstock', version: '1.7.0' }), { billed: BILLED });
+const server = withToolDefaults(new McpServer({ name: 'xmlstock', version: '1.8.0' }), { billed: BILLED });
 
 registerAuthTools(
   server,

@@ -95,7 +95,7 @@ const BILLED = [
   'xmlriver_related_questions',
   'xmlriver_maps',
 ];
-const server = withToolDefaults(new McpServer({ name: 'xmlriver', version: '1.7.0' }), { billed: BILLED });
+const server = withToolDefaults(new McpServer({ name: 'xmlriver', version: '1.8.0' }), { billed: BILLED });
 
 registerAuthTools(
   server,

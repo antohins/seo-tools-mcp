@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "metrika",
   "displayName": "SEO Tools: Yandex.Metrica",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Traffic sources, landing pages, search phrases, goals, geo and devices from the Yandex.Metrica Stat API. Read-only; run metrika_oauth_start after install.",
   "author": {
     "name": "antohins",

@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "xmlstock",
   "displayName": "SEO Tools: XMLStock (SERP + Wordstat)",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Google & Yandex SERP plus Yandex Wordstat via XMLStock: positions, competitors, snippets, keyword frequencies. Read-only.",
   "author": {
     "name": "antohins",

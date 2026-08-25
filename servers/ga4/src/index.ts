@@ -137,7 +137,7 @@ const reportInput = {
 };
 
 // withToolDefaults проставляет всем инструментам readOnlyHint/openWorldHint и title
-const server = withToolDefaults(new McpServer({ name: 'ga4', version: '1.7.0' }));
+const server = withToolDefaults(new McpServer({ name: 'ga4', version: '1.8.0' }));
 
 registerAuthTools(
   server,

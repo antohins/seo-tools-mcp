@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-08-25
+
 ### Added
 - **ga4**: `ga4_funnel` — funnel reports (`runFunnelReport`, v1alpha): how many users reached each
   step and where they dropped off, with an optional breakdown dimension. Two traps that cost real
@@ -643,7 +645,8 @@ installable via `npx -y seo-tools-mcp-<server>`.
 - Yandex region directory (~55 entries + aliases), all ids verified against the Wordstat tree;
   any numeric id works.
 
-[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/antohins/seo-tools-mcp/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/antohins/seo-tools-mcp/compare/v1.5.0...v1.5.1
