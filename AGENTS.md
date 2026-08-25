@@ -64,7 +64,14 @@
     MCP-реестра, `mcpName: io.github.antohins/...` в package.json).
 - `tests/` — юнит-тесты vitest, импортируют исходники напрямую (`../shared/src/http.js`,
   `../servers/<name>/src/...`); `tests/live/` — лайв-смоук по реальным API (opt-in).
-- `assets/` — логотипы; `.github/workflows/ci.yml` — CI; `glama.json` — каталог Glama.
+- `.claude-plugin/marketplace.json` + `plugins/<name>/` — маркетплейс плагинов Claude Code:
+  девять плагинов (по одному на сервер + бандл `seo-tools`). У каждого
+  `.claude-plugin/plugin.json` (метаданные + `userConfig` — ключи спрашиваются диалогом,
+  секретные уходят в системное хранилище) и `.mcp.json` (сам сервер через npx).
+  `mcpServers` держать в `.mcp.json`, а НЕ инлайном в манифесте: при инлайне
+  `claude plugin details` рапортует «MCP servers (0)».
+- `assets/` — логотипы; `.github/workflows/ci.yml` — CI; `glama.json` — каталог Glama;
+  `.plugin/plugin.json` — манифест Open Plugins (другой формат, не путать с `.claude-plugin/`).
 
 ## Команды
 
@@ -141,9 +148,10 @@ node servers/<name>/dist/index.js   # ручной запуск сервера (
   pnpm -r publish --access public   # private-пакеты пропускаются
   ```
   `pnpm publish` подставляет реальные версии вместо `workspace:*` и не публикует при грязном дереве.
-  Бамп: `pnpm -r exec npm version patch` — при этом обновить и литерал версии в
-  `new McpServer({ name, version })` каждого `servers/*/src/index.ts` (он НЕ синхронизируется
-  автоматически). Изменения фиксировать в `CHANGELOG.md` (Keep a Changelog).
+  Бамп: версию править в корневом `package.json`, затем `pnpm version:sync` — он разносит её
+  по всем 42 местам (package.json и server.json серверов, литерал `new McpServer({ version })`,
+  манифесты плагинов). `pnpm version:check` тот же прогон без записи, он же стоит в CI.
+  Изменения фиксировать в `CHANGELOG.md` (Keep a Changelog).
 - Прямая установка подпакета по GitHub-ссылке не поддерживается (pnpm-монорепа); дистрибуция —
   через npm (`npx -y seo-tools-mcp-<name>`).
 

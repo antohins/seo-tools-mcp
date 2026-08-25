@@ -126,7 +126,7 @@
 
 ## Быстрый старт
 
-### Вариант 0 — в один клик для Claude Desktop (.mcpb)
+### Вариант 1 — в один клик для Claude Desktop (.mcpb)
 
 Самый простой способ, ничего ставить руками не нужно: скачай нужный `.mcpb` со [страницы релиза](https://github.com/antohins/seo-tools-mcp/releases/latest) и **открой двойным кликом** — Claude Desktop поставит сервер сам и спросит ключи в диалоге установки.
 
@@ -135,7 +135,33 @@
 
 Бандлы самодостаточны (~0.2 МБ, зависимости внутри), Node.js 20+ нужен только для варианта с npx. Собрать самому: `pnpm build:mcpb`.
 
-### Вариант А — через npx (без клонирования)
+### Вариант 2 — плагин для Claude Code (маркетплейс)
+
+Аналог `.mcpb`, но для Claude Code: сервер, ключи и подсказки ставятся одной командой, ключи спрашиваются диалогом, секреты уходят в системное хранилище, а не в открытый файл.
+
+```bash
+claude plugin marketplace add antohins/seo-tools-mcp
+```
+
+Дальше — **только те источники, которые нужны**; каждый плагин тянет ровно один сервер:
+
+```bash
+claude plugin install xmlstock@seo-tools-mcp
+claude plugin install gsc@seo-tools-mcp
+claude plugin install ga4@seo-tools-mcp
+```
+
+Доступны `xmlstock`, `xmlriver`, `wordstat`, `gsc`, `ga4`, `ywm`, `metrika`, `aparser` — и `seo-tools`, который ставит все восемь сразу. Бандл удобен, но это ~98 инструментов в каждой сессии: если работаешь только с Вебмастером и Метрикой, ставь два плагина, а не бандл.
+
+Ключи можно ввести сразу (`--config KEY=VALUE`) или потом через `/plugin configure <плагин>@seo-tools-mcp`:
+
+```bash
+claude plugin install xmlstock@seo-tools-mcp --config XMLSTOCK_USER=12345 --config XMLSTOCK_KEY=...
+```
+
+Поля, помеченные как секретные (API-ключи, OAuth-секреты), Claude Code кладёт в системное хранилище; в `settings.json` они не попадают. Плагины на OAuth (`gsc`, `ga4`, `ywm`, `metrika`) при установке спрашивают только client_id/secret — сам вход проходит в чате через `<сервер>_oauth_start` → `<сервер>_oauth_finish`.
+
+### Вариант 3 — через npx (без клонирования)
 
 Каждый сервер — самодостаточный npm-пакет `seo-tools-mcp-<сервер>`; ставится одной командой:
 
@@ -189,7 +215,7 @@ XMLSTOCK_USER=... XMLSTOCK_KEY=... npx -y seo-tools-mcp-xmlstock
 
 > Прямая установка одного пакета по GitHub-ссылке (`npm i github:antohins/seo-tools-mcp`) **не поддерживается**: это pnpm-монорепа, отдельный подпакет так не ставится. Для установки из исходников — вариант Б ниже (клонировать + собрать). Готовые пакеты живут на npm.
 
-### Вариант Б — из исходников
+### Вариант 4 — из исходников
 
 ```bash
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp

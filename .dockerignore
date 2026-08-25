@@ -5,3 +5,7 @@
 .github
 tests
 *.log
+
+# манифесты плагинов Claude Code — в образ не нужны
+plugins
+.claude-plugin

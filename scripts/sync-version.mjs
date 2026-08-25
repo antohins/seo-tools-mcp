@@ -91,6 +91,17 @@ for (const name of SERVERS) {
 const plugin = join(ROOT, '.plugin', 'plugin.json');
 checkField(plugin, (j) => j.version, (j) => { j.version = VERSION; }, 'version');
 
+// Манифесты плагинов Claude Code: читаем каталог, а не список — новый плагин
+// подхватывается сам и не выпадает из проверки молча.
+const PLUGINS_DIR = join(ROOT, 'plugins');
+for (const name of readdirSync(PLUGINS_DIR, { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name)
+  .sort()) {
+  const manifest = join(PLUGINS_DIR, name, '.claude-plugin', 'plugin.json');
+  checkField(manifest, (j) => j.version, (j) => { j.version = VERSION; }, 'version');
+}
+
 if (fixed.length) console.log(`Синхронизировано под ${VERSION}:\n  ${fixed.join('\n  ')}`);
 
 // problems пополняется и в режиме --write (отсутствующее поле/файл автоматом не чинится),

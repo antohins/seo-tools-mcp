@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Claude Code plugin marketplace** (`.claude-plugin/marketplace.json` + `plugins/`): nine plugins —
+  one per server plus a `seo-tools` bundle — installable with
+  `claude plugin marketplace add antohins/seo-tools-mcp` and
+  `claude plugin install <name>@seo-tools-mcp`. One plugin pulls exactly one server, which is the
+  point: the bundle is ~98 tools in every session, and most work needs two or three sources.
+  Each plugin declares its keys as `userConfig`, so Claude Code asks for them in a dialog and puts
+  the ones marked `sensitive` (API keys, OAuth secrets) into the OS keychain instead of a plaintext
+  file — verified by installing all nine locally and confirming the secret never reaches
+  `settings.json`. `mcpServers` lives in each plugin's `.mcp.json` rather than inline in the
+  manifest: with the inline form the servers still start, but `claude plugin details` reports
+  "MCP servers (0)" — a lie in the most visible place of the plugin catalogue.
+
 ## [1.7.0] — 2026-08-08
 
 Post-release review of 1.6.0 (two passes) — fixes for the newly published `ga4` server and the

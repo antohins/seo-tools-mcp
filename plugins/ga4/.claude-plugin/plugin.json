@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "ga4",
+  "displayName": "SEO Tools: Google Analytics 4",
+  "version": "1.7.0",
+  "description": "GA4 reports, traffic sources, landing pages, events and realtime. Read-only; run ga4_oauth_start after install to authorise.",
+  "author": {
+    "name": "antohins",
+    "url": "https://github.com/antohins"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp/tree/main/servers/ga4#readme",
+  "repository": "https://github.com/antohins/seo-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "google-analytics",
+    "ga4",
+    "analytics",
+    "reporting"
+  ],
+  "userConfig": {
+    "GOOGLE_CLIENT_ID": {
+      "type": "string",
+      "title": "Google OAuth client ID",
+      "description": "Desktop-app OAuth client from console.cloud.google.com. Shared with the gsc plugin."
+    },
+    "GOOGLE_CLIENT_SECRET": {
+      "type": "string",
+      "title": "Google OAuth client secret",
+      "description": "Secret of the same OAuth client.",
+      "sensitive": true
+    },
+    "GA4_PROPERTY_ID": {
+      "type": "string",
+      "title": "Default property ID",
+      "description": "Numeric GA4 property id (not the G-XXXXXXX measurement ID) — see ga4_list_properties."
+    }
+  }
+}

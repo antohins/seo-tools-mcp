@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "wordstat": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-wordstat"
+      ],
+      "env": {
+        "WORDSTAT_API_KEY": "${user_config.WORDSTAT_API_KEY}",
+        "WORDSTAT_FOLDER_ID": "${user_config.WORDSTAT_FOLDER_ID}"
+      }
+    }
+  }
+}

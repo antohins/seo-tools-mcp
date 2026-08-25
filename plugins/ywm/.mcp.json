@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ywm": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-ywm"
+      ],
+      "env": {
+        "YANDEX_CLIENT_ID": "${user_config.YANDEX_CLIENT_ID}",
+        "YANDEX_CLIENT_SECRET": "${user_config.YANDEX_CLIENT_SECRET}",
+        "YWM_HOST_ID": "${user_config.YWM_HOST_ID}"
+      }
+    }
+  }
+}

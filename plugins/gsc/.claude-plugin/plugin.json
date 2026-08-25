@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "gsc",
+  "displayName": "SEO Tools: Google Search Console",
+  "version": "1.7.0",
+  "description": "Search Analytics, URL Inspection and sitemaps from Google Search Console. Read-only; run gsc_oauth_start after install to authorise.",
+  "author": {
+    "name": "antohins",
+    "url": "https://github.com/antohins"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp/tree/main/servers/gsc#readme",
+  "repository": "https://github.com/antohins/seo-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "google-search-console",
+    "gsc",
+    "search-analytics",
+    "url-inspection"
+  ],
+  "userConfig": {
+    "GOOGLE_CLIENT_ID": {
+      "type": "string",
+      "title": "Google OAuth client ID",
+      "description": "Desktop-app OAuth client from console.cloud.google.com. Shared with the ga4 plugin."
+    },
+    "GOOGLE_CLIENT_SECRET": {
+      "type": "string",
+      "title": "Google OAuth client secret",
+      "description": "Secret of the same OAuth client.",
+      "sensitive": true
+    },
+    "GSC_SITE_URL": {
+      "type": "string",
+      "title": "Default property",
+      "description": "e.g. sc-domain:example.com — otherwise pass siteUrl on every call."
+    }
+  }
+}

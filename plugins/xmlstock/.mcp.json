@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "xmlstock": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-xmlstock"
+      ],
+      "env": {
+        "XMLSTOCK_USER": "${user_config.XMLSTOCK_USER}",
+        "XMLSTOCK_KEY": "${user_config.XMLSTOCK_KEY}"
+      }
+    }
+  }
+}

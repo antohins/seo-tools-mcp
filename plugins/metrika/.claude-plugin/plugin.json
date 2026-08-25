@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "metrika",
+  "displayName": "SEO Tools: Yandex.Metrica",
+  "version": "1.7.0",
+  "description": "Traffic sources, landing pages, search phrases, goals, geo and devices from the Yandex.Metrica Stat API. Read-only; run metrika_oauth_start after install.",
+  "author": {
+    "name": "antohins",
+    "url": "https://github.com/antohins"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp/tree/main/servers/metrika#readme",
+  "repository": "https://github.com/antohins/seo-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "yandex",
+    "metrica",
+    "metrika",
+    "analytics",
+    "reporting"
+  ],
+  "userConfig": {
+    "YANDEX_CLIENT_ID": {
+      "type": "string",
+      "title": "Yandex OAuth app ID",
+      "description": "OAuth app from oauth.yandex.ru. Shared with the ywm plugin."
+    },
+    "YANDEX_CLIENT_SECRET": {
+      "type": "string",
+      "title": "Yandex OAuth app secret",
+      "description": "Secret of the same OAuth app.",
+      "sensitive": true
+    },
+    "METRIKA_COUNTER_ID": {
+      "type": "string",
+      "title": "Default counter ID",
+      "description": "Numeric counter id — see metrika_counters."
+    }
+  }
+}

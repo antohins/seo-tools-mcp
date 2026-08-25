@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ga4": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-ga4"
+      ],
+      "env": {
+        "GOOGLE_CLIENT_ID": "${user_config.GOOGLE_CLIENT_ID}",
+        "GOOGLE_CLIENT_SECRET": "${user_config.GOOGLE_CLIENT_SECRET}",
+        "GA4_PROPERTY_ID": "${user_config.GA4_PROPERTY_ID}"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "metrika": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-metrika"
+      ],
+      "env": {
+        "YANDEX_CLIENT_ID": "${user_config.YANDEX_CLIENT_ID}",
+        "YANDEX_CLIENT_SECRET": "${user_config.YANDEX_CLIENT_SECRET}",
+        "METRIKA_COUNTER_ID": "${user_config.METRIKA_COUNTER_ID}"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "gsc": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-gsc"
+      ],
+      "env": {
+        "GOOGLE_CLIENT_ID": "${user_config.GOOGLE_CLIENT_ID}",
+        "GOOGLE_CLIENT_SECRET": "${user_config.GOOGLE_CLIENT_SECRET}",
+        "GSC_SITE_URL": "${user_config.GSC_SITE_URL}"
+      }
+    }
+  }
+}

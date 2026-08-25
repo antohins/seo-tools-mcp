@@ -128,7 +128,7 @@ Units and dates: GA4 returns `bounceRate`/`engagementRate` as a **0..1 fraction*
 
 ## Quick start
 
-### Option 0 — one click for Claude Desktop (.mcpb)
+### Option 1 — one click for Claude Desktop (.mcpb)
 
 The simplest path, nothing to install by hand: grab the `.mcpb` you need from the [latest release](https://github.com/antohins/seo-tools-mcp/releases/latest) and **double-click it** — Claude Desktop installs the server and asks for the keys in its own dialog.
 
@@ -137,7 +137,33 @@ The simplest path, nothing to install by hand: grab the `.mcpb` you need from th
 
 Bundles are self-contained (~0.2 MB, dependencies inlined); Node.js 20+ is only needed for the npx route. Build them yourself with `pnpm build:mcpb`.
 
-### Option A — via npx (no cloning)
+### Option 2 — a Claude Code plugin (marketplace)
+
+The `.mcpb` equivalent for Claude Code: one command installs the server, asks for the keys in a dialog and stores secrets in the OS keychain rather than a plaintext file.
+
+```bash
+claude plugin marketplace add antohins/seo-tools-mcp
+```
+
+Then install **only the sources you need** — one plugin pulls exactly one server:
+
+```bash
+claude plugin install xmlstock@seo-tools-mcp
+claude plugin install gsc@seo-tools-mcp
+claude plugin install ga4@seo-tools-mcp
+```
+
+Available: `xmlstock`, `xmlriver`, `wordstat`, `gsc`, `ga4`, `ywm`, `metrika`, `aparser` — plus `seo-tools`, which installs all eight at once. The bundle is convenient but costs ~98 tools in every session: if you only work with Webmaster and Metrica, install those two plugins instead.
+
+Keys can be passed up front (`--config KEY=VALUE`) or set later via `/plugin configure <plugin>@seo-tools-mcp`:
+
+```bash
+claude plugin install xmlstock@seo-tools-mcp --config XMLSTOCK_USER=12345 --config XMLSTOCK_KEY=...
+```
+
+Fields marked sensitive (API keys, OAuth secrets) go to the OS keychain and never reach `settings.json`. The OAuth plugins (`gsc`, `ga4`, `ywm`, `metrika`) only ask for a client id/secret at install time — the sign-in itself happens in chat via `<server>_oauth_start` → `<server>_oauth_finish`.
+
+### Option 3 — via npx (no cloning)
 
 Each server is a self-contained npm package `seo-tools-mcp-<server>`; add it with one command:
 
@@ -189,9 +215,9 @@ In any MCP client (Claude Desktop, Cursor…) it's a single block in `mcpServers
 }
 ```
 
-> Installing a single package straight from the GitHub URL (`npm i github:antohins/seo-tools-mcp`) is **not supported**: it's a pnpm monorepo, so an individual subpackage can't be installed that way. To install from source, use Option B below (clone + build). The ready-to-use packages live on npm.
+> Installing a single package straight from the GitHub URL (`npm i github:antohins/seo-tools-mcp`) is **not supported**: it's a pnpm monorepo, so an individual subpackage can't be installed that way. To install from source, use Option 4 below (clone + build). The ready-to-use packages live on npm.
 
-### Option B — from source
+### Option 4 — from source
 
 ```bash
 git clone https://github.com/antohins/seo-tools-mcp.git && cd seo-tools-mcp

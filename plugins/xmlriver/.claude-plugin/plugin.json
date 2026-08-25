@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "xmlriver",
+  "displayName": "SEO Tools: XMLRiver (SERP + indexation)",
+  "version": "1.7.0",
+  "description": "Google & Yandex SERP, image/news/maps verticals, People Also Ask and URL indexation checks via XMLRiver. Read-only.",
+  "author": {
+    "name": "antohins",
+    "url": "https://github.com/antohins"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp/tree/main/servers/xmlriver#readme",
+  "repository": "https://github.com/antohins/seo-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "serp",
+    "google",
+    "yandex",
+    "xmlriver",
+    "indexation",
+    "rank-tracking"
+  ],
+  "userConfig": {
+    "XMLRIVER_USER": {
+      "type": "string",
+      "title": "XMLRiver user ID",
+      "description": "Numeric user ID from your XMLRiver dashboard (xmlriver.com)."
+    },
+    "XMLRIVER_KEY": {
+      "type": "string",
+      "title": "XMLRiver API key",
+      "description": "API key from the same dashboard.",
+      "sensitive": true
+    }
+  }
+}

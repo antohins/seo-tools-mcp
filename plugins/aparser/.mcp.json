@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "aparser": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-aparser"
+      ],
+      "env": {
+        "APARSER_URL": "${user_config.APARSER_URL}",
+        "APARSER_PASSWORD": "${user_config.APARSER_PASSWORD}"
+      }
+    }
+  }
+}

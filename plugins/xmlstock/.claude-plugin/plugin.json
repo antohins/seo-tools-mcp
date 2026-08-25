@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "xmlstock",
+  "displayName": "SEO Tools: XMLStock (SERP + Wordstat)",
+  "version": "1.7.0",
+  "description": "Google & Yandex SERP plus Yandex Wordstat via XMLStock: positions, competitors, snippets, keyword frequencies. Read-only.",
+  "author": {
+    "name": "antohins",
+    "url": "https://github.com/antohins"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp/tree/main/servers/xmlstock#readme",
+  "repository": "https://github.com/antohins/seo-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "serp",
+    "google",
+    "yandex",
+    "wordstat",
+    "xmlstock",
+    "rank-tracking"
+  ],
+  "userConfig": {
+    "XMLSTOCK_USER": {
+      "type": "string",
+      "title": "XMLStock user ID",
+      "description": "Numeric user ID from your XMLStock dashboard (xmlstock.com)."
+    },
+    "XMLSTOCK_KEY": {
+      "type": "string",
+      "title": "XMLStock API key",
+      "description": "API key from the same dashboard.",
+      "sensitive": true
+    }
+  }
+}

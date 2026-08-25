@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "aparser",
+  "displayName": "SEO Tools: A-Parser bridge",
+  "version": "1.7.0",
+  "description": "Bridge to your own self-hosted A-Parser: SERP, suggests and 150+ parsers via its HTTP API. Read-only; needs your own A-Parser licence and server.",
+  "author": {
+    "name": "antohins",
+    "url": "https://github.com/antohins"
+  },
+  "homepage": "https://github.com/antohins/seo-tools-mcp/tree/main/servers/aparser#readme",
+  "repository": "https://github.com/antohins/seo-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "a-parser",
+    "aparser",
+    "serp",
+    "scraping",
+    "self-hosted"
+  ],
+  "userConfig": {
+    "APARSER_URL": {
+      "type": "string",
+      "title": "A-Parser API endpoint",
+      "description": "Full URL including the path, e.g. http://IP:9091/API (A-Parser → Settings → API)."
+    },
+    "APARSER_PASSWORD": {
+      "type": "string",
+      "title": "A-Parser API password",
+      "description": "Password from the same settings page.",
+      "sensitive": true
+    }
+  }
+}

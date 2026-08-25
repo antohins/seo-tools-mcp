@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "seo-tools-mcp",
+  "owner": {
+    "name": "antohins",
+    "url": "https://github.com/antohins/seo-tools-mcp"
+  },
+  "description": "Read-only MCP servers for SEO on the Google/Yandex (RU/CIS) market — one plugin per data source.",
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "xmlstock",
+      "source": "./plugins/xmlstock",
+      "description": "Google & Yandex SERP plus Yandex Wordstat via XMLStock: positions, competitors, snippets, keyword frequencies. Read-only.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "serp",
+        "google",
+        "yandex",
+        "wordstat",
+        "xmlstock",
+        "rank-tracking"
+      ]
+    },
+    {
+      "name": "xmlriver",
+      "source": "./plugins/xmlriver",
+      "description": "Google & Yandex SERP, image/news/maps verticals, People Also Ask and URL indexation checks via XMLRiver. Read-only.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "serp",
+        "google",
+        "yandex",
+        "xmlriver",
+        "indexation",
+        "rank-tracking"
+      ]
+    },
+    {
+      "name": "wordstat",
+      "source": "./plugins/wordstat",
+      "description": "Keyword frequencies, seasonality and regional breakdown from the official Yandex Wordstat API v2. Free tier, read-only.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "wordstat",
+        "yandex",
+        "keyword-research",
+        "search-volume"
+      ]
+    },
+    {
+      "name": "gsc",
+      "source": "./plugins/gsc",
+      "description": "Search Analytics, URL Inspection and sitemaps from Google Search Console. Read-only; run gsc_oauth_start after install to authorise.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "google-search-console",
+        "gsc",
+        "search-analytics",
+        "url-inspection"
+      ]
+    },
+    {
+      "name": "ga4",
+      "source": "./plugins/ga4",
+      "description": "GA4 reports, traffic sources, landing pages, events and realtime. Read-only; run ga4_oauth_start after install to authorise.",
+      "category": "analytics",
+      "keywords": [
+        "seo",
+        "google-analytics",
+        "ga4",
+        "analytics",
+        "reporting"
+      ]
+    },
+    {
+      "name": "ywm",
+      "source": "./plugins/ywm",
+      "description": "Search queries, indexing history, SQI, diagnostics and broken links from Yandex.Webmaster. Read-only; run ywm_oauth_start after install.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "yandex",
+        "webmaster",
+        "indexing",
+        "search-queries"
+      ]
+    },
+    {
+      "name": "metrika",
+      "source": "./plugins/metrika",
+      "description": "Traffic sources, landing pages, search phrases, goals, geo and devices from the Yandex.Metrica Stat API. Read-only; run metrika_oauth_start after install.",
+      "category": "analytics",
+      "keywords": [
+        "seo",
+        "yandex",
+        "metrica",
+        "metrika",
+        "analytics",
+        "reporting"
+      ]
+    },
+    {
+      "name": "aparser",
+      "source": "./plugins/aparser",
+      "description": "Bridge to your own self-hosted A-Parser: SERP, suggests and 150+ parsers via its HTTP API. Read-only; needs your own A-Parser licence and server.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "a-parser",
+        "aparser",
+        "serp",
+        "scraping",
+        "self-hosted"
+      ]
+    },
+    {
+      "name": "seo-tools",
+      "source": "./plugins/seo-tools",
+      "description": "All eight servers at once (~98 tools). Prefer a single-server plugin unless you need the lot.",
+      "category": "seo",
+      "keywords": [
+        "seo",
+        "bundle"
+      ]
+    }
+  ]
+}

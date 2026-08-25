@@ -1,3 +1,7 @@
 packages:
   - shared
   - servers/*
+# pnpm 10 требует явного ответа по каждому postinstall-скрипту.
+# esbuild — движок tsup, скрипт установки штатный.
+allowBuilds:
+  esbuild: true

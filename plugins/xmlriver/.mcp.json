@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "xmlriver": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "seo-tools-mcp-xmlriver"
+      ],
+      "env": {
+        "XMLRIVER_USER": "${user_config.XMLRIVER_USER}",
+        "XMLRIVER_KEY": "${user_config.XMLRIVER_KEY}"
+      }
+    }
+  }
+}
