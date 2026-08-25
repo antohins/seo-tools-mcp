@@ -63,7 +63,11 @@
   - `Dockerfile` (сборка через `pnpm deploy`, production-образ) и `server.json` (манифест
     MCP-реестра, `mcpName: io.github.antohins/...` в package.json).
 - `tests/` — юнит-тесты vitest, импортируют исходники напрямую (`../shared/src/http.js`,
-  `../servers/<name>/src/...`); `tests/live/` — лайв-смоук по реальным API (opt-in).
+  `../servers/<name>/src/...`); `tests/live/` — лайв-смоук по реальным API (opt-in);
+  `tests/e2e/` — протокольный e2e поверх **собранных** `dist` (`pnpm test:e2e`,
+  отдельный `vitest.e2e.config.ts`, из основного прогона исключён). Юнит-тесты
+  поломку сборки не видят — в npm уезжает dist, поэтому список инструментов,
+  `title` и аннотации проверяются именно там.
 - `.claude-plugin/marketplace.json` + `plugins/<name>/` — маркетплейс плагинов Claude Code:
   девять плагинов (по одному на сервер + бандл `seo-tools`). У каждого
   `.claude-plugin/plugin.json` (метаданные + `userConfig` — ключи спрашиваются диалогом,
@@ -82,11 +86,13 @@ pnpm typecheck      # tsc --noEmit по всем воркспейсам
 pnpm lint           # Biome check (линт + формат)
 pnpm format         # Biome check --write (автофикс)
 pnpm test           # юнит-тесты vitest (без сети)
+pnpm test:e2e       # e2e по протоколу: собранные dist поднимаются как stdio-серверы (без сети)
 pnpm test:live      # LIVE=1: лайв-смоук по реальным API (нужны креды; в CI не гоняется)
 node servers/<name>/dist/index.js   # ручной запуск сервера (stdio)
 ```
 
-Перед PR прогонять: `pnpm lint && pnpm typecheck && pnpm test` (это же делает CI на Node 22/pnpm 10).
+Перед PR прогонять: `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e`
+(это же делает CI на Node 22; версия pnpm берётся из `packageManager`).
 Порядок сборки важен: серверы зависят от `shared/dist`, `pnpm -r build` резолвит его сам.
 
 ## Соглашения по коду

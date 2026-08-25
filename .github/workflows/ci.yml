@@ -18,10 +18,11 @@ jobs:
         with:
           persist-credentials: false
 
+      # Версию pnpm не задаём здесь: она пришпилена полем packageManager в package.json.
+      # Ключ allowBuilds в pnpm-workspace.yaml понимает только pnpm 11 — на pnpm 10
+      # установка встанет на неодобренном build-скрипте esbuild.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 10
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -36,7 +37,13 @@ jobs:
       - run: pnpm test
         # лайв-смоук (tests/live) пропускается без LIVE=1 и кредов — в CI не гоняется
 
-      # Версия дублируется в 33 местах (по 4 на каждый сервер + plugin.json).
+      # Юнит-тесты импортируют исходники, поэтому поломку сборки не видят, — а в npm
+      # и в .mcpb уезжает именно dist. Здесь собранные серверы поднимаются как stdio-процессы
+      # и опрашиваются настоящим MCP-клиентом. Сети не требует.
+      - name: E2E по протоколу (собранные серверы)
+        run: pnpm test:e2e
+
+      # Версия дублируется в 42 местах (по 4 на каждый сервер + манифесты плагинов).
       # Расхождение уже приводило к тому, что реестр MCP не получил выпущенную
       # версию, — гейт ловит это до релиза. Точный список печатает сам скрипт.
       - name: Проверка синхронности версий
@@ -49,8 +56,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v6
-        with:
-          version: 10
       - uses: actions/setup-node@v7
         with:
           node-version: 22

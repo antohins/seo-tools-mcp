@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Protocol-level e2e tests** (`tests/e2e/`, `pnpm test:e2e`, wired into CI): each of the eight
+  **built** servers is spawned as a real stdio process and interrogated by a real MCP client.
+  Every existing test imports sources, so nothing covered the `dist` that actually ships to npm and
+  into the `.mcpb` bundles — and that gap has bitten before: the first `.mcpb` attempt produced gsc
+  and ga4 bundles that did not start at all. Asserts the handshake, the exact tool list per server
+  (snapshotted, so a rename or a disappearance shows up in review), a non-empty `title` and
+  description on all 98 tools, and that `readOnlyHint` is false on exactly the 18 tools that write.
+  No network: it points `SEO_TOOLS_MCP_ENV` at an empty temp file and calls only `*_auth_status`,
+  which is local — so the run can neither read real credentials nor spend money on a paid API.
+  Each assertion was verified to fail by breaking the corresponding thing on purpose.
+
 - **Claude Code plugin marketplace** (`.claude-plugin/marketplace.json` + `plugins/`): nine plugins —
   one per server plus a `seo-tools` bundle — installable with
   `claude plugin marketplace add antohins/seo-tools-mcp` and
@@ -18,6 +29,13 @@ All notable changes to this project are documented here. The format is based on
   `settings.json`. `mcpServers` lives in each plugin's `.mcp.json` rather than inline in the
   manifest: with the inline form the servers still start, but `claude plugin details` reports
   "MCP servers (0)" — a lie in the most visible place of the plugin catalogue.
+
+### Fixed
+- A pnpm 11 upgrade had left `pnpm-workspace.yaml` holding an unanswered `allowBuilds:
+  esbuild: set this to true or false` placeholder, which made **every** `pnpm` command in the repo
+  fail with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`. Answered it, and pinned the pnpm version
+  via `packageManager` so this cannot drift again: the `allowBuilds` key does not exist in pnpm 10,
+  where the same setting is `onlyBuiltDependencies`, so CI no longer hardcodes a pnpm major.
 
 ## [1.7.0] — 2026-08-08
 

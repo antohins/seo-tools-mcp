@@ -1,0 +1,139 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MCP-протокол на собранных серверах > aparser: список инструментов не поехал 1`] = `
+[
+  "aparser_auth_status",
+  "aparser_bulk_request",
+  "aparser_get_preset",
+  "aparser_parser_fields",
+  "aparser_parsers",
+  "aparser_ping",
+  "aparser_proxies",
+  "aparser_request",
+  "aparser_serp_google",
+  "aparser_serp_yandex",
+  "aparser_set_credentials",
+  "aparser_status",
+  "aparser_suggest",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > ga4: список инструментов не поехал 1`] = `
+[
+  "ga4_auth_status",
+  "ga4_bytime",
+  "ga4_check_compatibility",
+  "ga4_devices",
+  "ga4_events",
+  "ga4_geo",
+  "ga4_list_properties",
+  "ga4_metadata",
+  "ga4_oauth_finish",
+  "ga4_oauth_start",
+  "ga4_realtime",
+  "ga4_report",
+  "ga4_save_sa_json",
+  "ga4_set_credentials",
+  "ga4_top_pages",
+  "ga4_traffic_sources",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > gsc: список инструментов не поехал 1`] = `
+[
+  "gsc_auth_status",
+  "gsc_get_site",
+  "gsc_get_sitemap",
+  "gsc_inspect_url",
+  "gsc_list_sitemaps",
+  "gsc_list_sites",
+  "gsc_oauth_finish",
+  "gsc_oauth_start",
+  "gsc_query",
+  "gsc_save_sa_json",
+  "gsc_set_credentials",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > metrika: список инструментов не поехал 1`] = `
+[
+  "metrika_auth_status",
+  "metrika_bytime",
+  "metrika_counters",
+  "metrika_devices",
+  "metrika_geo",
+  "metrika_goals",
+  "metrika_landing_behavior",
+  "metrika_oauth_finish",
+  "metrika_oauth_start",
+  "metrika_report",
+  "metrika_search_phrases",
+  "metrika_set_credentials",
+  "metrika_top_landings",
+  "metrika_traffic_sources",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > wordstat: список инструментов не поехал 1`] = `
+[
+  "wordstat_auth_status",
+  "wordstat_dynamics",
+  "wordstat_frequency",
+  "wordstat_regions",
+  "wordstat_regions_tree",
+  "wordstat_set_credentials",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > xmlriver: список инструментов не поехал 1`] = `
+[
+  "xmlriver_auth_status",
+  "xmlriver_balance",
+  "xmlriver_check_index",
+  "xmlriver_images",
+  "xmlriver_maps",
+  "xmlriver_news",
+  "xmlriver_related_questions",
+  "xmlriver_serp",
+  "xmlriver_set_credentials",
+  "xmlriver_suggest",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > xmlstock: список инструментов не поехал 1`] = `
+[
+  "xmlstock_auth_status",
+  "xmlstock_balance",
+  "xmlstock_images",
+  "xmlstock_news",
+  "xmlstock_serp",
+  "xmlstock_set_credentials",
+  "xmlstock_video",
+  "xmlstock_wordstat",
+  "xmlstock_wordstat_dynamics",
+  "xmlstock_wordstat_regions",
+  "xmlstock_wordstat_regions_tree",
+]
+`;
+
+exports[`MCP-протокол на собранных серверах > ywm: список инструментов не поехал 1`] = `
+[
+  "ywm_auth_status",
+  "ywm_broken_links",
+  "ywm_diagnostics",
+  "ywm_external_links",
+  "ywm_hosts",
+  "ywm_important_urls",
+  "ywm_indexing_history",
+  "ywm_oauth_finish",
+  "ywm_oauth_start",
+  "ywm_popular",
+  "ywm_queries_history",
+  "ywm_recommended_queries",
+  "ywm_search_queries",
+  "ywm_set_credentials",
+  "ywm_sitemaps",
+  "ywm_sqi_history",
+  "ywm_summary",
+]
+`;

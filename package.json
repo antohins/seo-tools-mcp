@@ -12,6 +12,7 @@
   "homepage": "https://github.com/antohins/seo-tools-mcp#readme",
   "bugs": "https://github.com/antohins/seo-tools-mcp/issues",
   "type": "module",
+  "packageManager": "pnpm@11.3.0",
   "engines": {
     "node": ">=20"
   },
@@ -22,6 +23,7 @@
     "format": "biome check --write",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:live": "LIVE=1 vitest run tests/live",
     "build:mcpb": "node scripts/build-mcpb.mjs",
     "version:check": "node scripts/sync-version.mjs",

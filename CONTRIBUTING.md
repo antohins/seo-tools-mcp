@@ -22,6 +22,7 @@ pnpm lint         # Biome (lint + format check)
 pnpm format       # auto-fix lint/format issues
 pnpm typecheck    # types across all workspaces
 pnpm test         # unit tests (vitest, no network)
+pnpm test:e2e     # protocol e2e over the built servers (no network; needs `pnpm build` first)
 ```
 
 `pnpm test:live` runs an end-to-end smoke against the real provider APIs — it needs
@@ -50,7 +51,7 @@ importing `index.ts` boots the stdio server.
 ## Pull requests
 
 1. Branch off `main`.
-2. Make the change + tests; run `pnpm typecheck && pnpm test`.
+2. Make the change + tests; run `pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e`.
 3. Open a PR describing the change and how you verified it. CI (build + typecheck +
    test) must pass.
 

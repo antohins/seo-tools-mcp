@@ -1,7 +1,10 @@
 packages:
   - shared
   - servers/*
-# pnpm 10 требует явного ответа по каждому postinstall-скрипту.
+
+# pnpm 11 требует явного ответа по каждому postinstall-скрипту (ключ появился в 11;
+# в pnpm 10 он назывался onlyBuiltDependencies — поэтому версия pnpm пришпилена
+# полем packageManager в корневом package.json: на pnpm 10 этот файл не заработает).
 # esbuild — движок tsup, скрипт установки штатный.
 allowBuilds:
   esbuild: true
