@@ -49,6 +49,12 @@ jobs:
       - name: Проверка синхронности версий
         run: pnpm version:check
 
+      # Каталог plugins/ целиком генерируется из спеки в scripts/sync-plugins.mjs,
+      # включая копии навыков (Claude Code не пускает skills-путь за пределы плагина).
+      # Расхождение означает, что правили копию, а не оригинал в skills/.
+      - name: Проверка синхронности плагинов
+        run: pnpm plugins:check
+
   audit:
     runs-on: ubuntu-latest
     steps:

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -58,6 +58,37 @@ describe('маркетплейс плагинов Claude Code', () => {
       expect({ [name]: Object.keys(env).sort() }).toEqual({ [name]: keys.sort() });
       for (const key of keys) expect(env[key]).toBe(`\${user_config.${key}}`);
     }
+  });
+
+  it('навыки в плагинах — побайтовые копии skills/<name>/SKILL.md', () => {
+    // источник правды один; копии генерирует scripts/sync-plugins.mjs, потому что
+    // Claude Code отвергает skills-путь за пределами каталога плагина
+    for (const name of pluginDirs) {
+      const dir = join(ROOT, 'plugins', name, 'skills');
+      if (!existsSync(dir)) continue;
+      for (const skill of readdirSync(dir)) {
+        const copy = readFileSync(join(dir, skill, 'SKILL.md'), 'utf8');
+        const origin = readFileSync(join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
+        expect(copy === origin ? 'ok' : `${name}/${skill}: копия разошлась с оригиналом`).toBe('ok');
+      }
+    }
+  });
+
+  it.each(readdirSync(join(ROOT, 'skills')))('навык %s: frontmatter на месте', (skill) => {
+    const text = readFileSync(join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
+    const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
+    expect(front, `${skill}: нет frontmatter`).toBeTruthy();
+    const name = /^name:\s*(.+)$/m.exec(front?.[1] ?? '')?.[1]?.trim();
+    const description = /^description:\s*(.+)$/m.exec(front?.[1] ?? '')?.[1]?.trim();
+    // имя обязано совпадать с каталогом — иначе навык не найдётся по своему же имени
+    expect(name).toBe(skill);
+    // description — единственное, что попадает в контекст всегда; пустой = навык не сработает
+    expect((description ?? '').length).toBeGreaterThan(40);
+  });
+
+  it('бандл seo-tools несёт все навыки', () => {
+    const all = readdirSync(join(ROOT, 'skills')).sort();
+    expect(readdirSync(join(ROOT, 'plugins', 'seo-tools', 'skills')).sort()).toEqual(all);
   });
 
   it('секретные поля помечены sensitive', () => {

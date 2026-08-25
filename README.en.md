@@ -163,6 +163,11 @@ claude plugin install xmlstock@seo-tools-mcp --config XMLSTOCK_USER=12345 --conf
 
 Fields marked sensitive (API keys, OAuth secrets) go to the OS keychain and never reach `settings.json`. The OAuth plugins (`gsc`, `ga4`, `ywm`, `metrika`) only ask for a client id/secret at install time — the sign-in itself happens in chat via `<server>_oauth_start` → `<server>_oauth_finish`.
 
+Each plugin also ships **skills** — procedural notes on its own data source: how not to burn
+the balance while tracking positions, why Wordstat's broad frequency overstates traffic several
+times over, what makes GA4 silently return zeros, how an averaged GSC position differs from one
+scraped off the SERP. They cost ~110 tokens each in context and expand only when actually needed.
+
 ### Option 3 — via npx (no cloning)
 
 Each server is a self-contained npm package `seo-tools-mcp-<server>`; add it with one command:

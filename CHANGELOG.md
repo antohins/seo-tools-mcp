@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Skills** (`skills/`, shipped inside the plugins): six procedural notes carrying the parts of
+  this domain that tool descriptions cannot — snapping positions without burning the SERP balance,
+  why Wordstat's broad frequency overstates traffic several times over, the three reasons GA4
+  silently returns zeros, why a GSC average position never matches one scraped off the SERP, and
+  reading Webmaster together with Metrica. A single-server plugin pays ~110 tokens per skill in
+  context; the body loads only when the skill is actually invoked.
+- **`scripts/sync-plugins.mjs`** (`pnpm plugins:sync` / `plugins:check`, the latter in CI): the
+  whole `plugins/` tree — manifests, `.mcp.json` and the skill copies — is generated from one spec.
+  Skills are *copied* rather than referenced because Claude Code rejects a `skills` path pointing
+  outside the plugin directory ("Validation errors: skills: Invalid input"), and one skill belongs
+  to several plugins. The check fails on a hand-edited copy, an orphaned file or a stale manifest,
+  so `skills/<name>/SKILL.md` stays the only place worth editing.
+
 - **Protocol-level e2e tests** (`tests/e2e/`, `pnpm test:e2e`, wired into CI): each of the eight
   **built** servers is spawned as a real stdio process and interrogated by a real MCP client.
   Every existing test imports sources, so nothing covered the `dist` that actually ships to npm and

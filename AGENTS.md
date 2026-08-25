@@ -68,10 +68,14 @@
   отдельный `vitest.e2e.config.ts`, из основного прогона исключён). Юнит-тесты
   поломку сборки не видят — в npm уезжает dist, поэтому список инструментов,
   `title` и аннотации проверяются именно там.
+- `skills/<name>/SKILL.md` — процедурные навыки (ИСТОЧНИК ПРАВДЫ, правится только здесь).
 - `.claude-plugin/marketplace.json` + `plugins/<name>/` — маркетплейс плагинов Claude Code:
-  девять плагинов (по одному на сервер + бандл `seo-tools`). У каждого
-  `.claude-plugin/plugin.json` (метаданные + `userConfig` — ключи спрашиваются диалогом,
-  секретные уходят в системное хранилище) и `.mcp.json` (сам сервер через npx).
+  девять плагинов (по одному на сервер + бандл `seo-tools`). Каталог `plugins/` целиком
+  ГЕНЕРИРУЕТСЯ из спеки в `scripts/sync-plugins.mjs` (`pnpm plugins:sync`), руками не править:
+  манифест `.claude-plugin/plugin.json` (метаданные + `userConfig` — ключи спрашиваются
+  диалогом, секретные уходят в системное хранилище), `.mcp.json` (сервер через npx) и КОПИИ
+  навыков в `plugins/<name>/skills/`. Копии, а не ссылки: Claude Code отвергает `skills`-путь
+  за пределами каталога плагина («Validation errors: skills: Invalid input»).
   `mcpServers` держать в `.mcp.json`, а НЕ инлайном в манифесте: при инлайне
   `claude plugin details` рапортует «MCP servers (0)».
 - `assets/` — логотипы; `.github/workflows/ci.yml` — CI; `glama.json` — каталог Glama;
@@ -87,6 +91,7 @@ pnpm lint           # Biome check (линт + формат)
 pnpm format         # Biome check --write (автофикс)
 pnpm test           # юнит-тесты vitest (без сети)
 pnpm test:e2e       # e2e по протоколу: собранные dist поднимаются как stdio-серверы (без сети)
+pnpm plugins:check  # не разошёлся ли plugins/ со спекой (в CI); plugins:sync — перегенерировать
 pnpm test:live      # LIVE=1: лайв-смоук по реальным API (нужны креды; в CI не гоняется)
 node servers/<name>/dist/index.js   # ручной запуск сервера (stdio)
 ```

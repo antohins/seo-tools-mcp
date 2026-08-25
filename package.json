@@ -26,6 +26,8 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:live": "LIVE=1 vitest run tests/live",
     "build:mcpb": "node scripts/build-mcpb.mjs",
+    "plugins:check": "node scripts/sync-plugins.mjs",
+    "plugins:sync": "node scripts/sync-plugins.mjs --write",
     "version:check": "node scripts/sync-version.mjs",
     "version:sync": "node scripts/sync-version.mjs --write"
   },
