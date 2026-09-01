@@ -6,6 +6,7 @@
 
 [![CI](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub MCP Registry](https://img.shields.io/badge/GitHub%20MCP%20Registry-8%20servers-24292e?logo=github)](https://github.com/mcp/antohins/seo-tools-mcp-gsc)
 
 **Русский** | [English](README.en.md)
 
@@ -19,10 +20,12 @@
 | `xmlriver` | `xmlriver_serp`, `xmlriver_images`, `xmlriver_news`, `xmlriver_maps`, `xmlriver_check_index`, `xmlriver_suggest`, `xmlriver_related_questions`, `xmlriver_balance` | API-ключ |
 | `wordstat` | `wordstat_frequency`, `wordstat_dynamics`, `wordstat_regions`, `wordstat_regions_tree` | Api-Key Yandex Cloud |
 | `gsc` | `gsc_query`, `gsc_inspect_url`, `gsc_list_sites`, `gsc_get_site`, `gsc_list_sitemaps`, `gsc_get_sitemap` | OAuth (все свойства аккаунта) / service account |
-| `ga4` | `ga4_list_properties`, `ga4_metadata`, `ga4_check_compatibility`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_realtime` | OAuth (все свойства аккаунта) / service account |
+| `ga4` | `ga4_list_properties`, `ga4_property_details`, `ga4_metadata`, `ga4_check_compatibility`, `ga4_report`, `ga4_bytime`, `ga4_traffic_sources`, `ga4_geo`, `ga4_devices`, `ga4_top_pages`, `ga4_events`, `ga4_funnel`, `ga4_annotations`, `ga4_realtime` | OAuth (все свойства аккаунта) / service account |
 | `ywm` | `ywm_hosts`, `ywm_summary`, `ywm_search_queries`, `ywm_queries_history`, `ywm_recommended_queries`, `ywm_popular`, `ywm_indexing_history`, `ywm_sqi_history`, `ywm_external_links`, `ywm_broken_links`, `ywm_diagnostics`, `ywm_important_urls`, `ywm_sitemaps` | OAuth (авто-refresh) |
 | `metrika` | `metrika_report`, `metrika_bytime`, `metrika_counters`, `metrika_goals`, `metrika_traffic_sources`, `metrika_geo`, `metrika_devices`, `metrika_landing_behavior`, `metrika_search_phrases`, `metrika_top_landings` | OAuth (авто-refresh) |
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (URL + пароль API) |
+
+Где опубликовано: [npm](https://www.npmjs.com/search?q=seo-tools-mcp) (восемь пакетов), [официальный MCP Registry](https://registry.modelcontextprotocol.io), **[GitHub MCP Registry](https://github.com/mcp/antohins/seo-tools-mcp-gsc)** (все восемь серверов), маркетплейс плагинов Claude Code (см. ниже) и `.mcpb`-бандлы в [релизах](https://github.com/antohins/seo-tools-mcp/releases/latest).
 
 У каждого сервера дополнительно есть auth-инструменты `<server>_auth_status` и `<server>_set_credentials` (см. [Интерактивная авторизация](#интерактивная-авторизация-в-любой-сессии)).
 

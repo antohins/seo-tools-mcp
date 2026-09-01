@@ -1,5 +1,7 @@
 # seo-tools-mcp-aparser
 
+[![GitHub MCP Registry](https://img.shields.io/badge/GitHub%20MCP%20Registry-listed-24292e?logo=github)](https://github.com/mcp/antohins/seo-tools-mcp-aparser)
+
 MCP server that bridges a **self-hosted [A-Parser](https://a-parser.com/?ref=38832) instance** to [Claude Code](https://claude.com/claude-code) and any MCP client — SERP, suggests and hundreds of parsers via A-Parser's HTTP API. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (SEO servers for the Google/Yandex market).
 
 > You need your **own** running A-Parser instance (licence + server). This bridge drives it; it does not host or proxy A-Parser for you.

@@ -1,5 +1,7 @@
 # seo-tools-mcp-gsc
 
+[![GitHub MCP Registry](https://img.shields.io/badge/GitHub%20MCP%20Registry-listed-24292e?logo=github)](https://github.com/mcp/antohins/seo-tools-mcp-gsc)
+
 MCP server for **Google Search Console (Search Analytics, read-only)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Read-only, strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (eight SEO servers).
 
 ## Install

@@ -1,5 +1,7 @@
 # seo-tools-mcp-xmlriver
 
+[![GitHub MCP Registry](https://img.shields.io/badge/GitHub%20MCP%20Registry-listed-24292e?logo=github)](https://github.com/mcp/antohins/seo-tools-mcp-xmlriver)
+
 MCP server for **Google & Yandex SERP via XMLRiver (read-only)** — for [Claude Code](https://claude.com/claude-code) and any MCP client. Strict JSON output. Part of [seo-tools-mcp](https://github.com/antohins/seo-tools-mcp) (SEO servers for the Google/Yandex market).
 
 ## Install

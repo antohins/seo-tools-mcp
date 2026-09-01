@@ -6,6 +6,7 @@
 
 [![CI](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/antohins/seo-tools-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub MCP Registry](https://img.shields.io/badge/GitHub%20MCP%20Registry-8%20servers-24292e?logo=github)](https://github.com/mcp/antohins/seo-tools-mcp-gsc)
 
 [Русский](README.md) | **English**
 
@@ -25,6 +26,8 @@ Eight **general-purpose** stdio MCP servers for SEO: access to SERP, Wordstat, G
 | `aparser` | `aparser_ping`, `aparser_status`, `aparser_proxies`, `aparser_parsers`, `aparser_parser_fields`, `aparser_get_preset`, `aparser_serp_google`, `aparser_serp_yandex`, `aparser_suggest`, `aparser_request`, `aparser_bulk_request` | self-hosted A-Parser (API URL + password) |
 
 > **Regional focus:** XMLStock covers both Google and Yandex SERP, while Wordstat, Webmaster and Metrica are Yandex services — this toolkit is most useful for SEO on the Russian/CIS market (though GSC and the Google side of XMLStock are global).
+
+Published on: [npm](https://www.npmjs.com/search?q=seo-tools-mcp) (eight packages), the [official MCP Registry](https://registry.modelcontextprotocol.io), the **[GitHub MCP Registry](https://github.com/mcp/antohins/seo-tools-mcp-gsc)** (all eight servers), the Claude Code plugin marketplace (below) and `.mcpb` bundles in the [releases](https://github.com/antohins/seo-tools-mcp/releases/latest).
 
 Every server additionally exposes auth tools `<server>_auth_status` and `<server>_set_credentials` (see [Interactive authorization](#interactive-authorization-any-session)).
 
