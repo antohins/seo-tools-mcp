@@ -39,14 +39,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "zod": "^3.24.0",
-    "google-auth-library": "^11.0.2"
+    "google-auth-library": "^11.1.0"
   },
   "devDependencies": {
     "@seo-tools/shared": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.20.4"
   }
 }
